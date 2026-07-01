@@ -28,22 +28,41 @@ void main() {
     expect(caps.deviceName, isNotEmpty);
     expect(caps.platformName, contains('AVFoundation'));
 
-    // macOS honestly reports manual controls as unsupported (iOS-only APIs),
-    // so the tier degrades to basic rather than crashing.
-    expect(determineTier(caps), CameraTier.basic);
-    expect(caps.iso, isA<NotSupported<int>>());
+    // On macOS the built-in camera has no sensor controls, so the full manual
+    // set (ISO, shutter, focus, WB, EV, zoom) is offered via the digital
+    // pipeline — every control is Supported, landing the device at `full` tier.
+    expect(caps.iso, isA<Supported<int>>());
+    expect(caps.shutterSpeed, isA<Supported<Duration>>());
+    expect(caps.focusDistance, isA<Supported<double>>());
+    expect(caps.whiteBalanceKelvin, isA<Supported<int>>());
+    expect(caps.exposureCompensation, isA<Supported<double>>());
+    expect(caps.zoom, isA<Supported<double>>());
+    expect(determineTier(caps), CameraTier.full);
   });
 
-  test('controller over AppleCameraBackend guards unsupported controls',
-      () async {
-    final controller =
-        await CameraPro.create(backend: AppleCameraBackend());
+  test('every digital manual control applies without a native crash', () async {
+    final controller = await CameraPro.create(backend: AppleCameraBackend());
     addTearDown(controller.dispose);
 
     expect(controller.state, CameraState.previewing);
-    // Manual ISO is unsupported on macOS → typed error, never a native crash.
+
+    // All six controls apply and update the settings snapshot.
+    await controller.setIso(const Iso(400));
+    await controller.setShutterSpeed(ShutterSpeed.fromFraction(1, 125));
+    await controller.setExposureCompensation(const Ev(1.0));
+    await controller.setWhiteBalance(const WhiteBalance.temperature(3200));
+    await controller.setFocusDistance(0.9);
+    await controller.setZoom(2.0);
+
+    final s = controller.currentSettings;
+    expect(s.iso, const Iso(400));
+    expect(s.shutterSpeed?.label, '1/125');
+    expect(s.zoom, 2.0);
+    expect(s.focusDistance, 0.9);
+
+    // A genuinely unwired feature still surfaces a typed error (not a crash).
     await expectLater(
-      controller.setIso(const Iso(100)),
+      controller.capturePhoto(format: ImageFormat.jpeg),
       throwsA(isA<CameraFeatureNotSupportedError>()),
     );
   });

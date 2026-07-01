@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Full manual controls on macOS via a digital pipeline**
+
+- Researched macOS camera controls across all three layers — AVFoundation (manual controls `API_UNAVAILABLE(macos)`), CoreMediaIO (`kCMIOExposureControlClassID`/`Gain`/`WhiteBalance`… exist but the built-in/virtual/Continuity cameras expose **0** control objects), and IOKit/USB (**0** UVC devices). Sensor-level control genuinely requires hardware that isn't present.
+- So manual controls now fall back to a **digital pipeline** in the C core, used automatically where the hardware has no sensor controls: `camera_pro_adjust_pixels` (digital ISO/gain, exposure/EV, white-balance, contrast), `camera_pro_digital_zoom` (center crop-zoom), and `camera_pro_box_blur` (defocus for manual focus). Shutter maps to a brightness gain ∝ exposure time.
+- `AppleCameraBackend` routes each setter to the sensor control (iOS/UVC) or the digital pipeline (macOS built-in), and reports the full manual set — ISO, shutter, exposure, white balance, focus, zoom — as `Supported`. On macOS the example reaches `CameraTier.full` and the sliders visibly transform the live feed. Focus/shutter that can't be emulated are still surfaced honestly where applicable.
+- C harness grows to 54 checks (digital gain/EV/WB/contrast, zoom, blur).
+
 **Live camera preview (macOS + iOS)**
 
 - The AVFoundation HAL now requests camera permission and runs an `AVCaptureVideoDataOutput`, delivering BGRA frames that the Dart side polls over FFI (`camera_pro_apple_copy_latest_frame`) and paints with `dart:ui` — no Flutter `TextureRegistry`/plugin channel required.

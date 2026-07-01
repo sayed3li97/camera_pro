@@ -1,11 +1,12 @@
 /// AVFoundation-backed [CameraBackend] for macOS and iOS.
 ///
-/// Forwards to the native HAL (`camera_hal_apple.m`) over FFI. On macOS the
-/// device's manual-control capabilities come back as unsupported (an
-/// AVFoundation limitation), so the controller degrades to `CameraTier.basic`;
-/// on iOS the same code reports full manual control. Photo/video capture and
-/// preview-texture rendering are still roadmap — those setters report the
-/// feature as unsupported rather than pretending.
+/// Forwards to the native HAL (`camera_hal_apple.m`) over FFI. Manual controls
+/// use the device's *sensor* controls where the hardware exposes them (iOS, and
+/// external UVC webcams); where it doesn't (the built-in camera on macOS, whose
+/// controls are unavailable via AVFoundation/CoreMediaIO/UVC), they fall back to
+/// a **digital** pipeline in the C core (`camera_pro_adjust_pixels` /
+/// `camera_pro_digital_zoom`) applied to preview frames — so ISO, exposure,
+/// white balance, and zoom still work and are visible on macOS.
 library;
 
 import 'dart:ffi' as ffi;
@@ -14,6 +15,7 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart' as pkg_ffi;
 
 import '../../controller/camera_backend.dart';
+import '../../ffi/camera_pro_bindings.dart' as core;
 import '../../ffi/hal_bindings.dart' as hal;
 import '../../models/camera_device.dart';
 import '../../models/capabilities.dart';
@@ -41,6 +43,27 @@ class AppleCameraBackend implements CameraBackend {
 
   late final ffi.Pointer<hal.CameraHalContext> _ctx;
   bool _closed = false;
+
+  // True when the device exposes real sensor controls (iOS / UVC). When false
+  // (macOS built-in camera), manual controls use the digital pipeline below.
+  bool _hardwareControls = false;
+
+  // Digital manual-control state (identity = no change).
+  double _gain = 1.0; // digital ISO
+  double _shutterGain = 1.0; // digital shutter (brightness ∝ exposure time)
+  double _bias = 0.0; // exposure/EV, additive
+  double _temp = 0.0; // white balance, warm(+)/cool(-)
+  double _zoom = 1.0; // digital zoom factor
+  int _blurRadius = 0; // digital defocus (manual focus)
+
+  bool get _adjustActive =>
+      !_hardwareControls &&
+      (_gain != 1.0 ||
+          _shutterGain != 1.0 ||
+          _bias != 0.0 ||
+          _temp != 0.0 ||
+          _zoom > 1.001 ||
+          _blurRadius > 0);
 
   static String _readString(
     int Function(ffi.Pointer<hal.CameraHalContext>, ffi.Pointer<ffi.Char>, int)
@@ -109,43 +132,57 @@ class AppleCameraBackend implements CameraBackend {
       final device =
           _readString(hal.camera_pro_apple_active_device_name, ctx: _ctx);
 
-      // On iOS the manual-control APIs exist together; WB tracks ISO support.
-      final manual = c.iso_supported == 1;
-      const iosOnly = 'AVFoundation manual control is iOS-only';
+      // Hardware sensor controls (iOS / UVC) vs. digital fallback (macOS built-in).
+      _hardwareControls = c.iso_supported == 1;
+      final hw = _hardwareControls;
 
       return CameraCapabilities(
-        iso: c.iso_supported == 1
+        // ISO: hardware sensitivity on iOS; digital gain on macOS.
+        iso: hw
             ? Supported<int>(
                 currentValue: c.iso_min, minValue: c.iso_min, maxValue: c.iso_max)
-            : const NotSupported<int>(reason: iosOnly),
-        shutterSpeed: c.shutter_supported == 1
+            : const Supported<int>(
+                currentValue: 100, minValue: 50, maxValue: 1600),
+        // Shutter: hardware exposure time on iOS; digital brightness on macOS
+        // (1/1000s..1/4s, brightness scales with exposure time).
+        shutterSpeed: hw
             ? Supported<Duration>(
                 currentValue: Duration(microseconds: c.shutter_min_ns ~/ 1000),
                 minValue: Duration(microseconds: c.shutter_min_ns ~/ 1000),
                 maxValue: Duration(microseconds: c.shutter_max_ns ~/ 1000),
               )
-            : const NotSupported<Duration>(reason: iosOnly),
-        focusDistance: c.focus_supported == 1
+            : const Supported<Duration>(
+                currentValue: Duration(microseconds: 16667), // ~1/60s
+                minValue: Duration(microseconds: 1000), // 1/1000s
+                maxValue: Duration(microseconds: 250000), // 1/4s
+              ),
+        // Focus: hardware lens position on iOS; digital defocus (blur) on macOS.
+        focusDistance: hw
             ? const Supported<double>(
                 currentValue: 0.5, minValue: 0.0, maxValue: 1.0)
-            : const NotSupported<double>(reason: iosOnly),
-        exposureCompensation: c.ev_supported == 1
+            : const Supported<double>(
+                currentValue: 0.5, minValue: 0.0, maxValue: 1.0),
+        // Exposure compensation: hardware bias on iOS; digital brightness on macOS.
+        exposureCompensation: hw
             ? Supported<double>(
                 currentValue: 0.0, minValue: c.ev_min, maxValue: c.ev_max)
-            : const NotSupported<double>(reason: iosOnly),
-        whiteBalanceKelvin: manual
-            ? const Supported<int>(
-                currentValue: 5000, minValue: 2500, maxValue: 10000)
-            : const NotSupported<int>(reason: iosOnly),
-        zoom: c.zoom_supported == 1
+            : const Supported<double>(
+                currentValue: 0.0, minValue: -3.0, maxValue: 3.0),
+        // White balance: hardware gains on iOS; digital channel balance on macOS.
+        whiteBalanceKelvin: const Supported<int>(
+            currentValue: 5500, minValue: 2500, maxValue: 10000),
+        // Zoom: hardware on iOS; digital crop-zoom on macOS.
+        zoom: hw
             ? Supported<double>(
                 currentValue: 1.0, minValue: 1.0, maxValue: c.zoom_max)
-            : const NotSupported<double>(reason: iosOnly),
+            : const Supported<double>(
+                currentValue: 1.0, minValue: 1.0, maxValue: 4.0),
         aperture: const NotSupported<double>(reason: 'Fixed aperture'),
         supportedMeteringModes: const <MeteringMode>[MeteringMode.matrix],
-        supportedFocusModes: manual
-            ? const <FocusMode>[FocusMode.autoContinuous, FocusMode.manual]
-            : const <FocusMode>[FocusMode.autoContinuous],
+        supportedFocusModes: const <FocusMode>[
+          FocusMode.autoContinuous,
+          FocusMode.manual,
+        ],
         supportedPhotoFormats: const <ImageFormat>[ImageFormat.jpeg],
         supportedVideoResolutions: const <VideoResolution>[
           VideoResolution.fhd1080p,
@@ -184,8 +221,9 @@ class AppleCameraBackend implements CameraBackend {
   @override
   Future<void> stopPreview() async => _check(hal.camera_hal_stop_preview(_ctx));
 
-  // Reused scratch buffer for polling preview frames (avoids per-frame malloc).
+  // Reused scratch buffers for polling preview frames (avoid per-frame malloc).
   ffi.Pointer<ffi.Uint8> _frameBuf = ffi.nullptr;
+  ffi.Pointer<ffi.Uint8> _zoomBuf = ffi.nullptr;
   int _frameBufCap = 0;
 
   @override
@@ -210,6 +248,7 @@ class AppleCameraBackend implements CameraBackend {
     const maxBytes = 3840 * 2160 * 4;
     if (_frameBufCap == 0) {
       _frameBuf = pkg_ffi.malloc<ffi.Uint8>(maxBytes);
+      _zoomBuf = pkg_ffi.malloc<ffi.Uint8>(maxBytes);
       _frameBufCap = maxBytes;
     }
     final wPtr = pkg_ffi.calloc<ffi.Int32>();
@@ -218,10 +257,29 @@ class AppleCameraBackend implements CameraBackend {
       final bytes = hal.camera_pro_apple_copy_latest_frame(
         _ctx, _frameBuf, _frameBufCap, wPtr, hPtr);
       if (bytes <= 0) return null;
+      final w = wPtr.value;
+      final h = hPtr.value;
+
+      // Apply the digital manual-control pipeline (macOS fallback). Frames are
+      // BGRA (is_bgra = 1). Hardware-controlled devices skip this entirely.
+      var src = _frameBuf;
+      if (_adjustActive) {
+        if (_zoom > 1.001) {
+          core.camera_pro_digital_zoom(_frameBuf, _zoomBuf, w, h, w * 4, _zoom);
+          src = _zoomBuf;
+        }
+        // ISO × shutter both scale brightness; EV is additive; temp is WB.
+        core.camera_pro_adjust_pixels(
+          src, w, h, w * 4, 1, _gain * _shutterGain, _bias, _temp, 1.0);
+        if (_blurRadius > 0) {
+          core.camera_pro_box_blur(src, w, h, w * 4, _blurRadius);
+        }
+      }
+
       return PreviewFrame(
-        bytes: Uint8List.fromList(_frameBuf.asTypedList(bytes)),
-        width: wPtr.value,
-        height: hPtr.value,
+        bytes: Uint8List.fromList(src.asTypedList(bytes)),
+        width: w,
+        height: h,
       );
     } finally {
       pkg_ffi.calloc.free(wPtr);
@@ -235,34 +293,72 @@ class AppleCameraBackend implements CameraBackend {
   }
 
   @override
-  Future<void> setShutterSpeed(ShutterSpeed value) async =>
+  Future<void> setShutterSpeed(ShutterSpeed value) async {
+    if (_hardwareControls) {
       _check(hal.camera_hal_set_shutter_speed_ns(_ctx, value.nanoseconds));
+    } else {
+      // Digital shutter: brightness scales with exposure time relative to 1/60s,
+      // clamped so extremes stay usable.
+      const referenceUs = 16667.0; // 1/60s
+      final g = value.duration.inMicroseconds / referenceUs;
+      _shutterGain = g.clamp(0.25, 4.0);
+    }
+  }
 
   @override
-  Future<void> setIso(Iso iso) async =>
+  Future<void> setIso(Iso iso) async {
+    if (_hardwareControls) {
       _check(hal.camera_hal_set_iso(_ctx, iso.value));
+    } else {
+      // Digital gain: ISO 100 == 1.0x.
+      _gain = iso.value / 100.0;
+    }
+  }
 
   @override
-  Future<void> setExposureCompensation(Ev ev) async =>
+  Future<void> setExposureCompensation(Ev ev) async {
+    if (_hardwareControls) {
       _check(hal.camera_hal_set_exposure_compensation(_ctx, ev.stops));
+    } else {
+      // Digital brightness: ~40 levels per stop.
+      _bias = ev.stops * 40.0;
+    }
+  }
 
   @override
   Future<void> setFocusMode(FocusMode mode) async {}
 
   @override
-  Future<void> setFocusDistance(double diopters) async =>
+  Future<void> setFocusDistance(double diopters) async {
+    if (_hardwareControls) {
       _check(hal.camera_hal_set_focus_distance(_ctx, diopters));
-
-  @override
-  Future<void> setWhiteBalance(WhiteBalance wb) async {
-    if (wb.kelvin != null) {
-      _check(hal.camera_hal_set_wb_temperature(_ctx, wb.kelvin!));
+    } else {
+      // Digital "rack focus": sharpest at 0.5, defocus (blur) toward either end.
+      final off = (diopters.clamp(0.0, 1.0) - 0.5).abs() * 2.0; // 0..1
+      _blurRadius = (off * 12).round();
     }
   }
 
   @override
-  Future<void> setZoom(double factor) async =>
+  Future<void> setWhiteBalance(WhiteBalance wb) async {
+    final kelvin = wb.kelvin;
+    if (kelvin == null) return;
+    if (_hardwareControls) {
+      _check(hal.camera_hal_set_wb_temperature(_ctx, kelvin));
+    } else {
+      // Digital channel balance: below 5500K warms, above cools.
+      _temp = ((5500 - kelvin) / 5000.0).clamp(-1.0, 1.0);
+    }
+  }
+
+  @override
+  Future<void> setZoom(double factor) async {
+    if (_hardwareControls) {
       _check(hal.camera_hal_set_zoom(_ctx, factor));
+    } else {
+      _zoom = factor < 1.0 ? 1.0 : factor;
+    }
+  }
 
   @override
   Future<void> setFlashMode(FlashMode mode) async {
@@ -309,6 +405,7 @@ class AppleCameraBackend implements CameraBackend {
     hal.camera_hal_destroy(_ctx);
     if (_frameBufCap > 0) {
       pkg_ffi.malloc.free(_frameBuf);
+      pkg_ffi.malloc.free(_zoomBuf);
       _frameBufCap = 0;
     }
   }

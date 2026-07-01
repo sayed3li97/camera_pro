@@ -11,6 +11,7 @@
 #include "camera_pro_core.h"
 
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 #if defined(__ARM_NEON) || defined(__ARM_NEON__)
@@ -196,6 +197,137 @@ int32_t camera_pro_compute_focus_peaking(
             }
         }
     }
+    return CAMERA_OK;
+}
+
+/* ── Digital manual-control adjustments ────────────────────────────────── */
+static inline uint8_t clampf_u8(float v) {
+    if (v < 0.0f) return 0;
+    if (v > 255.0f) return 255;
+    return (uint8_t)(v + 0.5f);
+}
+
+int32_t camera_pro_adjust_pixels(
+    uint8_t* px, int32_t width, int32_t height, int32_t stride,
+    int32_t is_bgra, float gain, float bias, float temp, float contrast) {
+
+    if (!px || width <= 0 || height <= 0) return CAMERA_ERROR_INVALID_PARAMETER;
+    if (stride <= 0) stride = width * 4;
+
+    const int ri = is_bgra ? 2 : 0;
+    const int bi = is_bgra ? 0 : 2;
+    /* White-balance channel gains: warm boosts red, cuts blue. */
+    const float r_gain = 1.0f + temp * 0.6f;
+    const float b_gain = 1.0f - temp * 0.6f;
+
+    for (int32_t y = 0; y < height; y++) {
+        uint8_t* row = px + (size_t)y * stride;
+        for (int32_t x = 0; x < width; x++) {
+            uint8_t* p = row + x * 4;
+            float ch[3];
+            ch[0] = (float)p[0];
+            ch[1] = (float)p[1];
+            ch[2] = (float)p[2];
+            for (int i = 0; i < 3; i++) {
+                float v = (ch[i] - 128.0f) * contrast + 128.0f; /* contrast */
+                v = v * gain + bias;                            /* ISO + EV  */
+                ch[i] = v;
+            }
+            ch[ri] *= r_gain;  /* white balance */
+            ch[bi] *= b_gain;
+            p[0] = clampf_u8(ch[0]);
+            p[1] = clampf_u8(ch[1]);
+            p[2] = clampf_u8(ch[2]);
+        }
+    }
+    return CAMERA_OK;
+}
+
+int32_t camera_pro_digital_zoom(
+    const uint8_t* in_px, uint8_t* out_px,
+    int32_t width, int32_t height, int32_t stride, float factor) {
+
+    if (!in_px || !out_px || width <= 0 || height <= 0)
+        return CAMERA_ERROR_INVALID_PARAMETER;
+    if (stride <= 0) stride = width * 4;
+    if (factor < 1.0f) factor = 1.0f;
+
+    const int32_t crop_w = (int32_t)(width / factor);
+    const int32_t crop_h = (int32_t)(height / factor);
+    const int32_t off_x = (width - crop_w) / 2;
+    const int32_t off_y = (height - crop_h) / 2;
+    const int32_t out_stride = width * 4;
+
+    for (int32_t y = 0; y < height; y++) {
+        const int32_t sy = off_y + (int32_t)(((int64_t)y * crop_h) / height);
+        const uint8_t* srow = in_px + (size_t)sy * stride;
+        uint8_t* orow = out_px + (size_t)y * out_stride;
+        for (int32_t x = 0; x < width; x++) {
+            const int32_t sx = off_x + (int32_t)(((int64_t)x * crop_w) / width);
+            const uint8_t* sp = srow + sx * 4;
+            uint8_t* op = orow + x * 4;
+            op[0] = sp[0]; op[1] = sp[1]; op[2] = sp[2]; op[3] = sp[3];
+        }
+    }
+    return CAMERA_OK;
+}
+
+/* ── Separable box blur (digital defocus) ──────────────────────────────── */
+int32_t camera_pro_box_blur(
+    uint8_t* px, int32_t width, int32_t height, int32_t stride, int32_t radius) {
+
+    if (!px || width <= 0 || height <= 0) return CAMERA_ERROR_INVALID_PARAMETER;
+    if (stride <= 0) stride = width * 4;
+    if (radius <= 0) return CAMERA_OK;
+
+    uint8_t* tmp = (uint8_t*)malloc((size_t)width * height * 4);
+    if (!tmp) return CAMERA_ERROR_OUT_OF_MEMORY;
+    const int32_t tstride = width * 4;
+
+    /* Horizontal pass: px -> tmp. */
+    for (int32_t y = 0; y < height; y++) {
+        const uint8_t* srow = px + (size_t)y * stride;
+        uint8_t* trow = tmp + (size_t)y * tstride;
+        for (int32_t x = 0; x < width; x++) {
+            int32_t x0 = x - radius, x1 = x + radius;
+            if (x0 < 0) x0 = 0;
+            if (x1 >= width) x1 = width - 1;
+            int32_t sum0 = 0, sum1 = 0, sum2 = 0, sum3 = 0;
+            const int32_t count = x1 - x0 + 1;
+            for (int32_t xx = x0; xx <= x1; xx++) {
+                const uint8_t* p = srow + xx * 4;
+                sum0 += p[0]; sum1 += p[1]; sum2 += p[2]; sum3 += p[3];
+            }
+            uint8_t* t = trow + x * 4;
+            t[0] = (uint8_t)(sum0 / count);
+            t[1] = (uint8_t)(sum1 / count);
+            t[2] = (uint8_t)(sum2 / count);
+            t[3] = (uint8_t)(sum3 / count);
+        }
+    }
+
+    /* Vertical pass: tmp -> px. */
+    for (int32_t y = 0; y < height; y++) {
+        int32_t y0 = y - radius, y1 = y + radius;
+        if (y0 < 0) y0 = 0;
+        if (y1 >= height) y1 = height - 1;
+        const int32_t count = y1 - y0 + 1;
+        uint8_t* drow = px + (size_t)y * stride;
+        for (int32_t x = 0; x < width; x++) {
+            int32_t sum0 = 0, sum1 = 0, sum2 = 0, sum3 = 0;
+            for (int32_t yy = y0; yy <= y1; yy++) {
+                const uint8_t* p = tmp + (size_t)yy * tstride + x * 4;
+                sum0 += p[0]; sum1 += p[1]; sum2 += p[2]; sum3 += p[3];
+            }
+            uint8_t* d = drow + x * 4;
+            d[0] = (uint8_t)(sum0 / count);
+            d[1] = (uint8_t)(sum1 / count);
+            d[2] = (uint8_t)(sum2 / count);
+            d[3] = (uint8_t)(sum3 / count);
+        }
+    }
+
+    free(tmp);
     return CAMERA_OK;
 }
 

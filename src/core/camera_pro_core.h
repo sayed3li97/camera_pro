@@ -110,6 +110,51 @@ camera_pro_compute_zebra(
     float          threshold,
     int32_t        frame_counter);
 
+/* ── Digital manual-control adjustments ────────────────────────────────────
+ * Applies in-place per-pixel adjustments to an 8-bit 4-channel image. Used as
+ * the software fallback for manual controls on devices/OSes that don't expose
+ * sensor-level controls (e.g. the built-in camera on macOS): digital gain maps
+ * ISO, bias maps exposure/EV, temp maps white-balance, plus contrast.
+ *
+ *   gain     multiplicative, 1.0 = unchanged (digital ISO/gain)
+ *   bias     additive in [-255..255] applied after gain (exposure/EV)
+ *   temp     white balance, >0 warmer (boost R, cut B), <0 cooler; ~[-1..1]
+ *   contrast 1.0 = unchanged, pivots around mid-gray
+ *   is_bgra  1 if channel order is B,G,R,A; 0 for R,G,B,A
+ * ───────────────────────────────────────────────────────────────────────── */
+CAMERA_PRO_EXPORT int32_t
+camera_pro_adjust_pixels(
+    uint8_t* px,
+    int32_t  width,
+    int32_t  height,
+    int32_t  stride,
+    int32_t  is_bgra,
+    float    gain,
+    float    bias,
+    float    temp,
+    float    contrast);
+
+/* Digital zoom: center-crops the input by `factor` (>=1) and scales it back to
+ * fill out (nearest-neighbour). out must be width*height*4 bytes. */
+CAMERA_PRO_EXPORT int32_t
+camera_pro_digital_zoom(
+    const uint8_t* in_px,
+    uint8_t*       out_px,
+    int32_t        width,
+    int32_t        height,
+    int32_t        stride,
+    float          factor);
+
+/* Separable box blur (in-place), radius in pixels. radius <= 0 is a no-op. Used
+ * as the digital "defocus" for manual focus on cameras without optical focus. */
+CAMERA_PRO_EXPORT int32_t
+camera_pro_box_blur(
+    uint8_t* px,
+    int32_t  width,
+    int32_t  height,
+    int32_t  stride,
+    int32_t  radius);
+
 /* ── Luminance waveform monitor ────────────────────────────────────────────
  * Builds a waveform: for each of `columns` horizontal buckets, a 256-bin
  * distribution of luminance. `out` must hold columns*256 uint32_t and is

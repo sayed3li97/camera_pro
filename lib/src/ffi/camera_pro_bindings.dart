@@ -178,6 +178,66 @@ external int camera_pro_compute_false_color(
   int stride,
 );
 
+// ── Digital manual-control adjustments ──────────────────────────────────────
+
+@ffi.Native<
+    ffi.Int32 Function(
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Float,
+      ffi.Float,
+      ffi.Float,
+      ffi.Float,
+    )>()
+external int camera_pro_adjust_pixels(
+  ffi.Pointer<ffi.Uint8> px,
+  int width,
+  int height,
+  int stride,
+  int isBgra,
+  double gain,
+  double bias,
+  double temp,
+  double contrast,
+);
+
+@ffi.Native<
+    ffi.Int32 Function(
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Float,
+    )>()
+external int camera_pro_digital_zoom(
+  ffi.Pointer<ffi.Uint8> inPx,
+  ffi.Pointer<ffi.Uint8> outPx,
+  int width,
+  int height,
+  int stride,
+  double factor,
+);
+
+@ffi.Native<
+    ffi.Int32 Function(
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+    )>()
+external int camera_pro_box_blur(
+  ffi.Pointer<ffi.Uint8> px,
+  int width,
+  int height,
+  int stride,
+  int radius,
+);
+
 // ── Format conversion ──────────────────────────────────────────────────────
 
 @ffi.Native<

@@ -43,6 +43,22 @@ class _CapabilityPageState extends State<CapabilityPage> {
   bool _decoding = false;
   int _frames = 0;
 
+  // Live manual-control state.
+  double _iso = 100;
+  double _shutterDenom = 60; // 1/60s
+  double _ev = 0;
+  double _wb = 5500;
+  double _focus = 0.5;
+  double _zoom = 1;
+
+  Future<void> _apply(Future<void> Function() action) async {
+    try {
+      await action();
+    } on CameraProError catch (e) {
+      setState(() => _error = '${e.runtimeType}: ${e.message}');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -151,6 +167,7 @@ class _CapabilityPageState extends State<CapabilityPage> {
                   tier: controller.tier,
                   caps: controller.capabilities,
                 ),
+                ..._buildControls(controller),
                 if (_error != null)
                   Card(
                     color: Colors.red.shade900,
@@ -166,6 +183,115 @@ class _CapabilityPageState extends State<CapabilityPage> {
                 ..._capabilityRows(controller.capabilities),
               ],
             ),
+    );
+  }
+
+  List<Widget> _buildControls(CameraProController controller) {
+    final caps = controller.capabilities;
+    final rows = <Widget>[];
+
+    if (caps.iso case Supported<int>(:final minValue, :final maxValue)) {
+      rows.add(_slider('ISO', _iso, minValue.toDouble(), maxValue.toDouble(),
+          _iso.round().toString(), (v) {
+        setState(() => _iso = v);
+        _apply(() => controller.setIso(Iso(v.round())));
+      }));
+    }
+    if (caps.shutterSpeed
+        case Supported<Duration>(:final minValue, :final maxValue)) {
+      final minDenom = 1000000 / maxValue.inMicroseconds; // slow -> small denom
+      final maxDenom = 1000000 / minValue.inMicroseconds; // fast -> large denom
+      rows.add(_slider('Shutter', _shutterDenom, minDenom, maxDenom,
+          '1/${_shutterDenom.round()}', (v) {
+        setState(() => _shutterDenom = v);
+        _apply(() =>
+            controller.setShutterSpeed(ShutterSpeed.fromFraction(1, v.round())));
+      }));
+    }
+    if (caps.exposureCompensation
+        case Supported<double>(:final minValue, :final maxValue)) {
+      rows.add(_slider('Exposure (EV)', _ev, minValue, maxValue,
+          '${_ev >= 0 ? '+' : ''}${_ev.toStringAsFixed(1)}', (v) {
+        setState(() => _ev = v);
+        _apply(() => controller.setExposureCompensation(Ev(v)));
+      }));
+    }
+    if (caps.whiteBalanceKelvin
+        case Supported<int>(:final minValue, :final maxValue)) {
+      rows.add(_slider('White balance', _wb, minValue.toDouble(),
+          maxValue.toDouble(), '${_wb.round()}K', (v) {
+        setState(() => _wb = v);
+        _apply(() => controller.setWhiteBalance(WhiteBalance.temperature(v.round())));
+      }));
+    }
+    if (caps.focusDistance
+        case Supported<double>(:final minValue, :final maxValue)) {
+      rows.add(_slider('Focus', _focus, minValue, maxValue,
+          _focus.toStringAsFixed(2), (v) {
+        setState(() => _focus = v);
+        _apply(() => controller.setFocusDistance(v));
+      }));
+    }
+    if (caps.zoom case Supported<double>(:final minValue, :final maxValue)) {
+      rows.add(_slider('Zoom', _zoom, minValue, maxValue,
+          '${_zoom.toStringAsFixed(1)}x', (v) {
+        setState(() => _zoom = v);
+        _apply(() => controller.setZoom(v));
+      }));
+    }
+
+    if (rows.isEmpty) return const <Widget>[];
+    return <Widget>[
+      const SizedBox(height: 8),
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(children: const <Widget>[
+                Icon(Icons.tune, size: 18),
+                SizedBox(width: 6),
+                Text('Manual controls',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ]),
+              if (controller.tier != CameraTier.full)
+                const Padding(
+                  padding: EdgeInsets.only(top: 2, bottom: 4),
+                  child: Text(
+                    'digital pipeline (this camera has no sensor controls)',
+                    style: TextStyle(fontSize: 11, color: Colors.white54),
+                  ),
+                ),
+              ...rows,
+            ],
+          ),
+        ),
+      ),
+    ];
+  }
+
+  Widget _slider(String label, double value, double min, double max,
+      String valueLabel, ValueChanged<double> onChanged) {
+    return Row(
+      children: <Widget>[
+        SizedBox(
+            width: 96,
+            child: Text(label, style: const TextStyle(fontSize: 13))),
+        Expanded(
+          child: Slider(
+            value: value.clamp(min, max),
+            min: min,
+            max: max,
+            onChanged: onChanged,
+          ),
+        ),
+        SizedBox(
+            width: 56,
+            child: Text(valueLabel,
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontSize: 12))),
+      ],
     );
   }
 

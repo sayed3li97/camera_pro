@@ -212,6 +212,67 @@ static void test_waveform_falsecolor(void) {
     free(out);
 }
 
+static void test_adjustments(void) {
+    printf("digital manual-control adjustments\n");
+    const int32_t W = 8, H = 8, stride = W * 4;
+    uint8_t* px = (uint8_t*)malloc((size_t)stride * H);
+
+    /* Fill RGBA gray 100. */
+    for (int32_t i = 0; i < W * H; i++) {
+        px[i*4+0] = 100; px[i*4+1] = 100; px[i*4+2] = 100; px[i*4+3] = 255;
+    }
+    /* Digital ISO/gain 1.5 => 150. */
+    camera_pro_adjust_pixels(px, W, H, stride, 0, 1.5f, 0.0f, 0.0f, 1.0f);
+    CHECK(px[0] == 150 && px[1] == 150 && px[2] == 150, "gain 1.5 scales 100->150");
+
+    /* Reset, exposure bias +20 => 120. */
+    for (int32_t i = 0; i < W * H; i++) { px[i*4+0]=px[i*4+1]=px[i*4+2]=100; }
+    camera_pro_adjust_pixels(px, W, H, stride, 0, 1.0f, 20.0f, 0.0f, 1.0f);
+    CHECK(px[0] == 120, "bias +20 raises 100->120");
+
+    /* Reset, warm white balance temp=0.5 (RGBA): R up, B down, G same. */
+    for (int32_t i = 0; i < W * H; i++) { px[i*4+0]=px[i*4+1]=px[i*4+2]=100; }
+    camera_pro_adjust_pixels(px, W, H, stride, 0, 1.0f, 0.0f, 0.5f, 1.0f);
+    CHECK(px[0] == 130 && px[1] == 100 && px[2] == 70, "warm WB boosts R, cuts B");
+
+    /* BGRA order: temp warm should boost channel[2] (R), cut channel[0] (B). */
+    for (int32_t i = 0; i < W * H; i++) { px[i*4+0]=px[i*4+1]=px[i*4+2]=100; }
+    camera_pro_adjust_pixels(px, W, H, stride, 1, 1.0f, 0.0f, 0.5f, 1.0f);
+    CHECK(px[2] == 130 && px[0] == 70, "warm WB respects BGRA channel order");
+
+    /* Contrast 2.0 around mid-gray: 100 -> (100-128)*2+128 = 72. */
+    for (int32_t i = 0; i < W * H; i++) { px[i*4+0]=px[i*4+1]=px[i*4+2]=100; }
+    camera_pro_adjust_pixels(px, W, H, stride, 0, 1.0f, 0.0f, 0.0f, 2.0f);
+    CHECK(px[0] == 72, "contrast 2.0 pushes 100->72 around mid-gray");
+
+    /* Digital zoom 2x: a bright center block should land on the output center. */
+    for (int32_t i = 0; i < W * H; i++) { px[i*4+0]=px[i*4+1]=px[i*4+2]=50; }
+    px[(4*W+4)*4+0] = px[(4*W+4)*4+1] = px[(4*W+4)*4+2] = 200; /* center pixel */
+    uint8_t* zout = (uint8_t*)malloc((size_t)stride * H);
+    CHECK(camera_pro_digital_zoom(px, zout, W, H, stride, 2.0f) == CAMERA_OK,
+          "digital zoom returns OK");
+    CHECK(zout[(4*W+4)*4] == 200, "zoom keeps center content centered");
+    CHECK(zout[0] == 50, "zoom corners show cropped-in background");
+
+    free(zout);
+
+    /* Box blur (digital defocus): a sharp black/white edge should soften. */
+    for (int32_t yy = 0; yy < H; yy++)
+        for (int32_t xx = 0; xx < W; xx++) {
+            uint8_t v = (xx >= W/2) ? 255 : 0;
+            uint8_t* p = px + ((size_t)yy*W + xx)*4;
+            p[0]=p[1]=p[2]=v; p[3]=255;
+        }
+    CHECK(camera_pro_box_blur(px, W, H, stride, 0) == CAMERA_OK, "blur radius 0 is a no-op");
+    CHECK(px[(0*W + W/2 - 1)*4] == 0 && px[(0*W + W/2)*4] == 255, "radius 0 keeps the edge sharp");
+    camera_pro_box_blur(px, W, H, stride, 2);
+    uint8_t left = px[(3*W + W/2 - 1)*4];
+    uint8_t right = px[(3*W + W/2)*4];
+    CHECK(left > 0 && left < 255 && right > 0 && right < 255, "blur softens the edge to mid-tones");
+
+    free(px);
+}
+
 static void test_hal_stub(void) {
     printf("HAL stub backend\n");
     camera_context_t* ctx = NULL;
@@ -236,6 +297,7 @@ int main(void) {
     test_format_conversion();
     test_visual_aids();
     test_waveform_falsecolor();
+    test_adjustments();
     test_hal_stub();
     printf("\n=== %d checks, %d failures ===\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
