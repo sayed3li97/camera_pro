@@ -1,0 +1,20 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-raw-types: true
+  errors:
+    # The public API is documented; missing docs on public members is a warning
+    # we treat as informational during the foundation phase.
+    public_member_api_docs: ignore
+  exclude:
+    - "example/build/**"
+    - "**/*.g.dart"
+
+linter:
+  rules:
+    - prefer_final_locals
+    - avoid_print
+    - unawaited_futures
+    - directives_ordering

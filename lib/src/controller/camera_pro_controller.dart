@@ -1,0 +1,325 @@
+/// The main camera controller.
+///
+/// Wraps a [CameraBackend] with the capability-guard logic that makes the API
+/// crash-proof: every manual control validates against the device's
+/// [CameraCapabilities] and throws a typed [CameraProError] *before* touching
+/// native code, rather than letting the platform fail deep in a callback.
+library;
+
+import 'dart:async';
+
+import 'package:meta/meta.dart';
+
+import '../models/camera_device.dart';
+import '../models/camera_state.dart';
+import '../models/capabilities.dart';
+import '../models/capture_result.dart';
+import '../models/errors.dart';
+import '../models/settings.dart';
+import 'camera_backend.dart';
+import 'camera_state_machine.dart';
+import 'camera_tier.dart';
+
+/// An immutable snapshot of the currently applied manual settings.
+@immutable
+class CameraSettings {
+  const CameraSettings({
+    this.exposureMode = ExposureMode.auto,
+    this.iso,
+    this.shutterSpeed,
+    this.exposureCompensation,
+    this.focusMode = FocusMode.autoContinuous,
+    this.focusDistance,
+    this.whiteBalance,
+    this.zoom = 1.0,
+    this.flashMode = FlashMode.off,
+  });
+
+  final ExposureMode exposureMode;
+  final Iso? iso;
+  final ShutterSpeed? shutterSpeed;
+  final Ev? exposureCompensation;
+  final FocusMode focusMode;
+  final double? focusDistance;
+  final WhiteBalance? whiteBalance;
+  final double zoom;
+  final FlashMode flashMode;
+
+  CameraSettings copyWith({
+    ExposureMode? exposureMode,
+    Iso? iso,
+    ShutterSpeed? shutterSpeed,
+    Ev? exposureCompensation,
+    FocusMode? focusMode,
+    double? focusDistance,
+    WhiteBalance? whiteBalance,
+    double? zoom,
+    FlashMode? flashMode,
+  }) {
+    return CameraSettings(
+      exposureMode: exposureMode ?? this.exposureMode,
+      iso: iso ?? this.iso,
+      shutterSpeed: shutterSpeed ?? this.shutterSpeed,
+      exposureCompensation: exposureCompensation ?? this.exposureCompensation,
+      focusMode: focusMode ?? this.focusMode,
+      focusDistance: focusDistance ?? this.focusDistance,
+      whiteBalance: whiteBalance ?? this.whiteBalance,
+      zoom: zoom ?? this.zoom,
+      flashMode: flashMode ?? this.flashMode,
+    );
+  }
+}
+
+/// Drives a camera session and enforces capability-safe control.
+class CameraProController {
+  CameraProController._({
+    required CameraBackend backend,
+    required CameraCapabilities capabilities,
+    CameraStateMachine? stateMachine,
+    int? textureId,
+  })  : _backend = backend,
+        _capabilities = capabilities,
+        _tier = determineTier(capabilities),
+        _stateMachine = stateMachine ?? CameraStateMachine(),
+        _textureId = textureId;
+
+  /// Opens a session against [backend] (defaults to [StubCameraBackend] until a
+  /// platform HAL is wired), reads the capability passport, and starts preview.
+  static Future<CameraProController> create({
+    CameraBackend? backend,
+    CameraDevice? device,
+  }) async {
+    final b = backend ?? StubCameraBackend();
+    final target = device ??
+        (await b.enumerateDevices()).defaultCamera ??
+        const CameraDevice(
+          index: 0,
+          name: 'default',
+          direction: LensDirection.unknown,
+        );
+
+    final textureId = await b.open(target);
+    final caps = await b.getCapabilities();
+
+    final controller = CameraProController._(
+      backend: b,
+      capabilities: caps,
+      textureId: textureId,
+    );
+    controller._stateMachine.transition(CameraState.opened);
+    await b.startPreview();
+    controller._stateMachine.transition(CameraState.previewing);
+    return controller;
+  }
+
+  /// Builds a controller in the previewing state with injected capabilities,
+  /// for unit-testing the capability-guard logic without a device.
+  @visibleForTesting
+  static CameraProController forTesting({
+    required CameraCapabilities capabilities,
+    CameraBackend? backend,
+  }) {
+    final controller = CameraProController._(
+      backend: backend ?? StubCameraBackend(),
+      capabilities: capabilities,
+    );
+    controller._stateMachine
+      ..transition(CameraState.opened)
+      ..transition(CameraState.previewing);
+    return controller;
+  }
+
+  final CameraBackend _backend;
+  final CameraCapabilities _capabilities;
+  final CameraTier _tier;
+  final CameraStateMachine _stateMachine;
+  final int? _textureId;
+
+  CameraSettings _settings = const CameraSettings();
+
+  /// The device capability passport.
+  CameraCapabilities get capabilities => _capabilities;
+
+  /// The control tier for this device.
+  CameraTier get tier => _tier;
+
+  /// The current lifecycle state.
+  CameraState get state => _stateMachine.state;
+
+  /// Stream of lifecycle transitions.
+  Stream<CameraStateChange> get stateChanges => _stateMachine.changes;
+
+  /// Flutter texture id for the preview, or null on backends without one.
+  int? get textureId => _textureId;
+
+  /// The currently applied manual settings.
+  CameraSettings get currentSettings => _settings;
+
+  // ── Capability-guarded setters ─────────────────────────────────────────
+
+  /// Sets manual ISO. Throws [CameraFeatureNotSupportedError] if the device has
+  /// no manual ISO, or [CameraInvalidParameterError] if out of range.
+  Future<void> setIso(Iso iso) async {
+    final cap = _capabilities.iso;
+    switch (cap) {
+      case NotSupported<int>(:final reason):
+        throw CameraFeatureNotSupportedError(
+          feature: 'Manual ISO',
+          platformReason: reason,
+        );
+      case Supported<int>(:final minValue, :final maxValue):
+        if (iso.value < minValue || iso.value > maxValue) {
+          throw CameraInvalidParameterError(
+            message: 'ISO ${iso.value} out of range [$minValue, $maxValue]',
+          );
+        }
+    }
+    await _backend.setIso(iso);
+    _settings = _settings.copyWith(iso: iso);
+  }
+
+  /// Sets manual shutter speed. Guarded by [CameraCapabilities.shutterSpeed].
+  Future<void> setShutterSpeed(ShutterSpeed value) async {
+    final cap = _capabilities.shutterSpeed;
+    switch (cap) {
+      case NotSupported<Duration>(:final reason):
+        throw CameraFeatureNotSupportedError(
+          feature: 'Manual shutter speed',
+          platformReason: reason,
+        );
+      case Supported<Duration>(:final minValue, :final maxValue):
+        if (value.duration < minValue || value.duration > maxValue) {
+          throw CameraInvalidParameterError(
+            message: 'Shutter ${value.label} out of range '
+                '[${minValue.inMicroseconds}us, ${maxValue.inMicroseconds}us]',
+          );
+        }
+    }
+    await _backend.setShutterSpeed(value);
+    _settings = _settings.copyWith(shutterSpeed: value);
+  }
+
+  /// Sets exposure compensation. Guarded by
+  /// [CameraCapabilities.exposureCompensation].
+  Future<void> setExposureCompensation(Ev ev) async {
+    final cap = _capabilities.exposureCompensation;
+    switch (cap) {
+      case NotSupported<double>(:final reason):
+        throw CameraFeatureNotSupportedError(
+          feature: 'Exposure compensation',
+          platformReason: reason,
+        );
+      case Supported<double>(:final minValue, :final maxValue):
+        if (ev.stops < minValue || ev.stops > maxValue) {
+          throw CameraInvalidParameterError(
+            message: 'EV ${ev.stops} out of range [$minValue, $maxValue]',
+          );
+        }
+    }
+    await _backend.setExposureCompensation(ev);
+    _settings = _settings.copyWith(exposureCompensation: ev);
+  }
+
+  /// Sets a manual white-balance temperature. Guarded by
+  /// [CameraCapabilities.whiteBalanceKelvin] when [wb] is manual.
+  Future<void> setWhiteBalance(WhiteBalance wb) async {
+    if (wb.mode == WhiteBalanceMode.manual) {
+      final cap = _capabilities.whiteBalanceKelvin;
+      switch (cap) {
+        case NotSupported<int>(:final reason):
+          throw CameraFeatureNotSupportedError(
+            feature: 'Manual white balance',
+            platformReason: reason,
+          );
+        case Supported<int>(:final minValue, :final maxValue):
+          final k = wb.kelvin!;
+          if (k < minValue || k > maxValue) {
+            throw CameraInvalidParameterError(
+              message: '${k}K out of range [${minValue}K, ${maxValue}K]',
+            );
+          }
+      }
+    }
+    await _backend.setWhiteBalance(wb);
+    _settings = _settings.copyWith(whiteBalance: wb);
+  }
+
+  /// Sets manual focus distance in diopters. Guarded by
+  /// [CameraCapabilities.focusDistance].
+  Future<void> setFocusDistance(double diopters) async {
+    final cap = _capabilities.focusDistance;
+    switch (cap) {
+      case NotSupported<double>(:final reason):
+        throw CameraFeatureNotSupportedError(
+          feature: 'Manual focus',
+          platformReason: reason,
+        );
+      case Supported<double>(:final minValue, :final maxValue):
+        if (diopters < minValue || diopters > maxValue) {
+          throw CameraInvalidParameterError(
+            message: 'Focus $diopters out of range [$minValue, $maxValue]',
+          );
+        }
+    }
+    await _backend.setFocusDistance(diopters);
+    _settings = _settings.copyWith(focusDistance: diopters);
+  }
+
+  /// Sets the zoom factor, clamped to the supported range when known.
+  Future<void> setZoom(double factor) async {
+    final cap = _capabilities.zoom;
+    if (cap case Supported<double>(:final minValue, :final maxValue)) {
+      if (factor < minValue || factor > maxValue) {
+        throw CameraInvalidParameterError(
+          message: 'Zoom $factor out of range [$minValue, $maxValue]',
+        );
+      }
+    }
+    await _backend.setZoom(factor);
+    _settings = _settings.copyWith(zoom: factor);
+  }
+
+  /// Sets the flash mode. Throws if the device has no flash.
+  Future<void> setFlashMode(FlashMode mode) async {
+    if (mode != FlashMode.off && !_capabilities.hasFlash) {
+      throw CameraFeatureNotSupportedError(
+        feature: 'Flash',
+        platformReason: 'No flash unit on this device',
+      );
+    }
+    await _backend.setFlashMode(mode);
+    _settings = _settings.copyWith(flashMode: mode);
+  }
+
+  // ── Capture ────────────────────────────────────────────────────────────
+
+  /// Captures a still photo. Throws [CameraStateException] if not previewing.
+  Future<CapturedPhoto> capturePhoto({ImageFormat? format}) async {
+    if (!state.canCapture) {
+      throw CameraStateException('Cannot capture in state ${state.name}');
+    }
+    if (format == ImageFormat.raw && !_capabilities.supportsRawCapture) {
+      throw CameraFeatureNotSupportedError(
+        feature: 'RAW capture',
+        platformReason: 'Device does not expose a RAW stream',
+      );
+    }
+    _stateMachine.transition(CameraState.capturing);
+    try {
+      return await _backend.capturePhoto(format: format);
+    } finally {
+      if (_stateMachine.canTransitionTo(CameraState.previewing)) {
+        _stateMachine.transition(CameraState.previewing);
+      }
+    }
+  }
+
+  /// Releases all resources.
+  Future<void> dispose() async {
+    if (_stateMachine.canTransitionTo(CameraState.disposed)) {
+      _stateMachine.transition(CameraState.disposed);
+    }
+    await _backend.close();
+    await _stateMachine.dispose();
+  }
+}

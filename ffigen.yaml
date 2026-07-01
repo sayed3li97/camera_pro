@@ -1,0 +1,30 @@
+# ffigen configuration for regenerating lib/src/ffi/camera_pro_bindings.dart
+# from the C headers. Requires libclang (`brew install llvm` / `apt install
+# libclang-dev`). Run: `dart run ffigen`.
+#
+# The bindings use FFI-native (@Native + @DefaultAsset) so they bind to the
+# code asset produced by hook/build.dart rather than a runtime dlopen.
+name: CameraProCoreBindings
+description: Auto-generated FFI bindings for the camera_pro C core.
+output: 'lib/src/ffi/camera_pro_bindings.dart'
+ffi-native:
+  assetId: 'package:camera_pro/src/ffi/camera_pro_bindings.dart'
+headers:
+  entry-points:
+    - 'src/core/camera_pro_core.h'
+  include-directives:
+    - 'src/core/camera_pro_core.h'
+    - 'src/core/camera_pro_types.h'
+compiler-opts:
+  - '-I src/core'
+  - '-I src/hal'
+preamble: |
+  // AUTO-GENERATED — DO NOT EDIT BY HAND.
+  // Regenerate with `dart run ffigen`.
+  // ignore_for_file: non_constant_identifier_names, camel_case_types
+functions:
+  include:
+    - 'camera_pro_.*'
+comments:
+  style: any
+  length: full

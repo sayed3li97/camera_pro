@@ -1,0 +1,35 @@
+# Dart / Flutter
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+pubspec.lock
+
+# Flutter tool
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+
+# Native build artifacts
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Coverage
+coverage/
+*.lcov
+
+# Example build output
+example/build/
+example/.dart_tool/
