@@ -12,6 +12,7 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart' as pkg_ffi;
 
 import '../processing/histogram.dart';
+import '../processing/waveform.dart';
 import 'camera_pro_bindings.dart' as bindings;
 
 /// Static accessors for the shared native core.
@@ -69,6 +70,54 @@ class NativeCore {
       pkg_ffi.calloc.free(red);
       pkg_ffi.calloc.free(green);
       pkg_ffi.calloc.free(blue);
+    }
+  }
+
+  /// Computes a luminance waveform over a tightly-packed RGBA buffer.
+  static WaveformData waveformFromRgba(
+    Uint8List rgba, {
+    required int width,
+    required int height,
+    int columns = 256,
+    int stride = 0,
+  }) {
+    final effectiveStride = stride == 0 ? width * 4 : stride;
+    final src = pkg_ffi.malloc<ffi.Uint8>(rgba.length);
+    final out = pkg_ffi.calloc<ffi.Uint32>(columns * 256);
+    try {
+      src.asTypedList(rgba.length).setAll(0, rgba);
+      bindings.camera_pro_compute_luma_waveform(
+        src, width, height, effectiveStride, out, columns,
+      );
+      return WaveformData(
+        columns: columns,
+        bins: Uint32List.fromList(out.asTypedList(columns * 256)),
+      );
+    } finally {
+      pkg_ffi.malloc.free(src);
+      pkg_ffi.calloc.free(out);
+    }
+  }
+
+  /// Produces a false-color exposure map (tightly-packed RGBA) for a frame.
+  static Uint8List falseColorFromRgba(
+    Uint8List rgba, {
+    required int width,
+    required int height,
+    int stride = 0,
+  }) {
+    final effectiveStride = stride == 0 ? width * 4 : stride;
+    final src = pkg_ffi.malloc<ffi.Uint8>(rgba.length);
+    final out = pkg_ffi.malloc<ffi.Uint8>(width * height * 4);
+    try {
+      src.asTypedList(rgba.length).setAll(0, rgba);
+      bindings.camera_pro_compute_false_color(
+        src, out, width, height, effectiveStride,
+      );
+      return Uint8List.fromList(out.asTypedList(width * height * 4));
+    } finally {
+      pkg_ffi.malloc.free(src);
+      pkg_ffi.malloc.free(out);
     }
   }
 }

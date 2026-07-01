@@ -35,5 +35,6 @@ export 'src/platform/thermal.dart'
     show ThermalLevel, ThermalPolicy, ThermalStatus;
 // Processing
 export 'src/processing/histogram.dart' show HistogramData;
+export 'src/processing/waveform.dart' show WaveformData;
 // Utils
 export 'src/utils/result.dart' show Err, Ok, Result;

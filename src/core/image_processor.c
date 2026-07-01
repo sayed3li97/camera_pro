@@ -199,6 +199,66 @@ int32_t camera_pro_compute_focus_peaking(
     return CAMERA_OK;
 }
 
+/* ── Luminance waveform monitor ────────────────────────────────────────── */
+int32_t camera_pro_compute_luma_waveform(
+    const uint8_t* rgba, int32_t width, int32_t height, int32_t stride,
+    uint32_t* out, int32_t columns) {
+
+    if (!rgba || !out || width <= 0 || height <= 0 || columns <= 0)
+        return CAMERA_ERROR_INVALID_PARAMETER;
+    if (stride <= 0) stride = width * 4;
+
+    memset(out, 0, (size_t)columns * 256 * sizeof(uint32_t));
+
+    for (int32_t y = 0; y < height; y++) {
+        const uint8_t* row = rgba + (size_t)y * stride;
+        for (int32_t x = 0; x < width; x++) {
+            int32_t col = (int32_t)(((int64_t)x * columns) / width);
+            if (col >= columns) col = columns - 1;
+            uint8_t luma = luma_u8(row[x * 4 + 0], row[x * 4 + 1], row[x * 4 + 2]);
+            out[(size_t)col * 256 + luma]++;
+        }
+    }
+    return CAMERA_OK;
+}
+
+/* ── False-color exposure map ──────────────────────────────────────────── */
+static void false_color_for(uint8_t y, uint8_t* r, uint8_t* g, uint8_t* b) {
+    if (y < 3)        { *r = 0x30; *g = 0x00; *b = 0x60; }  /* crushed  → purple */
+    else if (y < 20)  { *r = 0x00; *g = 0x00; *b = 0xFF; }  /* shadows  → blue   */
+    else if (y < 42)  { *r = 0x00; *g = 0xC0; *b = 0xFF; }  /* low mid  → cyan   */
+    else if (y < 100) { *r = 0x00; *g = 0xFF; *b = 0x00; }  /* 18% gray → green  */
+    else if (y < 150) { *r = 0xC0; *g = 0xC0; *b = 0xC0; }  /* mid      → gray   */
+    else if (y < 200) { *r = 0xFF; *g = 0xC0; *b = 0xC0; }  /* highlight→ pink   */
+    else if (y < 250) { *r = 0xFF; *g = 0xFF; *b = 0x00; }  /* near clip→ yellow */
+    else              { *r = 0xFF; *g = 0x00; *b = 0x00; }  /* clipped  → red    */
+}
+
+int32_t camera_pro_compute_false_color(
+    const uint8_t* rgba, uint8_t* out_rgba,
+    int32_t width, int32_t height, int32_t stride) {
+
+    if (!rgba || !out_rgba || width <= 0 || height <= 0)
+        return CAMERA_ERROR_INVALID_PARAMETER;
+    if (stride <= 0) stride = width * 4;
+
+    const int32_t out_stride = width * 4;
+    for (int32_t y = 0; y < height; y++) {
+        const uint8_t* row = rgba + (size_t)y * stride;
+        uint8_t* orow = out_rgba + (size_t)y * out_stride;
+        for (int32_t x = 0; x < width; x++) {
+            uint8_t luma = luma_u8(row[x * 4 + 0], row[x * 4 + 1], row[x * 4 + 2]);
+            uint8_t r, g, b;
+            false_color_for(luma, &r, &g, &b);
+            orow[x * 4 + 0] = r;
+            orow[x * 4 + 1] = g;
+            orow[x * 4 + 2] = b;
+            orow[x * 4 + 3] = row[x * 4 + 3];
+        }
+    }
+    return CAMERA_OK;
+}
+
 /* ── Zebra stripes (over-exposure overlay) ─────────────────────────────── */
 int32_t camera_pro_compute_zebra(
     const uint8_t* rgba, uint8_t* out_rgba,

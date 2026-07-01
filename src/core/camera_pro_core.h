@@ -110,6 +110,33 @@ camera_pro_compute_zebra(
     float          threshold,
     int32_t        frame_counter);
 
+/* ── Luminance waveform monitor ────────────────────────────────────────────
+ * Builds a waveform: for each of `columns` horizontal buckets, a 256-bin
+ * distribution of luminance. `out` must hold columns*256 uint32_t and is
+ * cleared internally. Column c, luma y maps to out[c*256 + y].
+ * ───────────────────────────────────────────────────────────────────────── */
+CAMERA_PRO_EXPORT int32_t
+camera_pro_compute_luma_waveform(
+    const uint8_t* rgba,
+    int32_t        width,
+    int32_t        height,
+    int32_t        stride,
+    uint32_t*      out,        /* columns * 256 bins */
+    int32_t        columns);
+
+/* ── False-color exposure map ──────────────────────────────────────────────
+ * Writes an RGBA image tinting each pixel by its exposure zone (crushed →
+ * purple, shadows → blue, mid/18% → green, highlights → pink/yellow, clipped →
+ * red). Useful for judging exposure at a glance.
+ * ───────────────────────────────────────────────────────────────────────── */
+CAMERA_PRO_EXPORT int32_t
+camera_pro_compute_false_color(
+    const uint8_t* rgba,
+    uint8_t*       out_rgba,
+    int32_t        width,
+    int32_t        height,
+    int32_t        stride);
+
 /* ── Format conversion (scalar BT.601) ─────────────────────────────────────
  * All converters write tightly-packed RGBA8888 (stride = width*4).
  * Return CAMERA_OK or an error code.

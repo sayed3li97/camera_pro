@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Shared C core visual aids**
+
+- Luminance waveform monitor (`camera_pro_compute_luma_waveform`) → `WaveformData` (per-column 256-bin luminance distribution), exposed via `NativeCore.waveformFromRgba`.
+- False-color exposure map (`camera_pro_compute_false_color`) → RGBA zones (crushed→purple … clipped→red), exposed via `NativeCore.falseColorFromRgba`.
+- C harness grows to 43 checks; 2 new Dart FFI tests exercise both through the compiled core (63 Dart tests total).
+
 **Apple (iOS + macOS) AVFoundation backend — first real platform HAL**
 
 - `src/platform/apple/camera_hal_apple.m`: shared Objective-C implementation of the full `camera_hal.h` contract against AVFoundation. Device enumeration (`AVCaptureDeviceDiscoverySession`), open/close, capability reporting, and manual controls (ISO, shutter, exposure compensation, focus lens position, white-balance temperature, zoom, torch). iOS-only manual-control APIs are guarded with `#if TARGET_OS_IOS`; on macOS they are honestly reported as unsupported (degrading to `CameraTier.basic`).

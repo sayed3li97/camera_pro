@@ -171,6 +171,47 @@ static void test_visual_aids(void) {
     free(out);
 }
 
+static void test_waveform_falsecolor(void) {
+    printf("waveform + false color\n");
+    const int32_t W = 16, H = 4, stride = W * 4;
+    uint8_t* in = (uint8_t*)malloc((size_t)stride * H);
+    for (int32_t i = 0; i < W * H; i++) {
+        in[i * 4 + 0] = 128; in[i * 4 + 1] = 128; in[i * 4 + 2] = 128; in[i * 4 + 3] = 255;
+    }
+
+    const int32_t cols = 8;
+    uint32_t* wf = (uint32_t*)malloc((size_t)cols * 256 * sizeof(uint32_t));
+    CHECK(camera_pro_compute_luma_waveform(in, W, H, stride, wf, cols) == CAMERA_OK,
+          "waveform returns OK");
+    /* Solid gray => every column has all its pixels in luma bin 128. */
+    int wf_ok = 1;
+    uint64_t total = 0;
+    for (int32_t c = 0; c < cols; c++) {
+        if (wf[c * 256 + 128] != (uint32_t)((W / cols) * H)) wf_ok = 0;
+        for (int b = 0; b < 256; b++) total += wf[c * 256 + b];
+    }
+    CHECK(wf_ok, "solid gray => each column peaks at luma 128");
+    CHECK(total == (uint64_t)(W * H), "waveform counts sum to pixel count");
+    free(wf);
+
+    uint8_t* out = (uint8_t*)malloc((size_t)stride * H);
+    CHECK(camera_pro_compute_false_color(in, out, W, H, stride) == CAMERA_OK,
+          "false color returns OK");
+    /* Mid gray (128) falls in the 100..149 band => gray 0xC0C0C0. */
+    CHECK(out[0] == 0xC0 && out[1] == 0xC0 && out[2] == 0xC0, "mid gray => gray zone");
+
+    for (int32_t i = 0; i < W * H; i++) in[i * 4 + 0] = in[i * 4 + 1] = in[i * 4 + 2] = 255;
+    camera_pro_compute_false_color(in, out, W, H, stride);
+    CHECK(out[0] == 0xFF && out[1] == 0x00 && out[2] == 0x00, "clipped white => red zone");
+
+    for (int32_t i = 0; i < W * H; i++) in[i * 4 + 0] = in[i * 4 + 1] = in[i * 4 + 2] = 0;
+    camera_pro_compute_false_color(in, out, W, H, stride);
+    CHECK(out[2] == 0x60, "crushed black => purple zone");
+
+    free(in);
+    free(out);
+}
+
 static void test_hal_stub(void) {
     printf("HAL stub backend\n");
     camera_context_t* ctx = NULL;
@@ -194,6 +235,7 @@ int main(void) {
     test_histogram();
     test_format_conversion();
     test_visual_aids();
+    test_waveform_falsecolor();
     test_hal_stub();
     printf("\n=== %d checks, %d failures ===\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

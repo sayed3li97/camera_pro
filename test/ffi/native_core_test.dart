@@ -52,6 +52,42 @@ void main() {
       expect(hist.peak, w * h);
     });
 
+    test('computes a luminance waveform over a real buffer', () {
+      const w = 16, h = 4;
+      final rgba = Uint8List(w * h * 4);
+      for (var i = 0; i < w * h; i++) {
+        rgba[i * 4 + 0] = 128;
+        rgba[i * 4 + 1] = 128;
+        rgba[i * 4 + 2] = 128;
+        rgba[i * 4 + 3] = 255;
+      }
+      final wf = NativeCore.waveformFromRgba(rgba, width: w, height: h, columns: 8);
+      expect(wf.columns, 8);
+      // Solid gray => each column's pixels all land in luma bin 128.
+      expect(wf.at(0, 128), (w ~/ 8) * h);
+      expect(wf.at(3, 128), (w ~/ 8) * h);
+      expect(wf.at(0, 200), 0);
+    });
+
+    test('produces a false-color exposure map', () {
+      const w = 4, h = 4;
+      Uint8List solid(int v) {
+        final b = Uint8List(w * h * 4);
+        for (var i = 0; i < w * h; i++) {
+          b[i * 4 + 0] = v;
+          b[i * 4 + 1] = v;
+          b[i * 4 + 2] = v;
+          b[i * 4 + 3] = 255;
+        }
+        return b;
+      }
+
+      final gray = NativeCore.falseColorFromRgba(solid(128), width: w, height: h);
+      expect([gray[0], gray[1], gray[2]], [0xC0, 0xC0, 0xC0]); // mid => gray
+      final white = NativeCore.falseColorFromRgba(solid(255), width: w, height: h);
+      expect([white[0], white[1], white[2]], [0xFF, 0x00, 0x00]); // clip => red
+    });
+
     test('buffer pool acquires, drains, and releases', () {
       final pool = NativeBufferPool.create(bufferSize: 1024, count: 2);
       expect(pool, isNotNull);

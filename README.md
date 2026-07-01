@@ -70,6 +70,8 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | Sobel focus peaking (C core) | ✅ | `camera_pro_compute_focus_peaking` |
 | Zebra highlight clipping (C core) | ✅ | `camera_pro_compute_zebra` |
 | RGBA histogram (C core) | ✅ | `camera_pro_compute_histogram_rgba` + `_scalar` |
+| Luminance waveform monitor (C core) | ✅ | `camera_pro_compute_luma_waveform` → `WaveformData` |
+| False-color exposure map (C core) | ✅ | `camera_pro_compute_false_color` |
 | GPU compute focus peaking (Metal/Vulkan/D3D11/WebGPU) | 🚧 | Architecture planned; shaders not written |
 | Live viewfinder overlay | 🚧 | Depends on texture registration |
 
@@ -201,9 +203,9 @@ The following results were produced on macOS arm64 with Flutter 3.44.1 / Dart 3.
 
 | Test suite | Result |
 |---|---|
-| C core (`clang -std=c11 -O2 -Wall -Wextra -Werror`) | **36/36 checks pass** |
+| C core (`clang -std=c11 -O2 -Wall -Wextra -Werror`) | **43/43 checks pass** |
 | NEON histogram cross-check vs scalar reference | Bit-exact on arm64 |
-| Dart unit + FFI tests (`flutter test`) | **61/61 pass** (54 pure-logic, 7 real FFI through compiled core) |
+| Dart unit + FFI tests (`flutter test`) | **63/63 pass** (54 pure-logic, 9 real FFI through compiled core) |
 | `flutter analyze` (package) | **No issues** |
 | `flutter analyze` (example app) | **No issues** |
 | Example app widget test | **Pass** |

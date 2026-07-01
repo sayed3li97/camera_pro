@@ -144,6 +144,40 @@ external int camera_pro_compute_zebra(
   int frameCounter,
 );
 
+@ffi.Native<
+    ffi.Int32 Function(
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Pointer<ffi.Uint32>,
+      ffi.Int32,
+    )>()
+external int camera_pro_compute_luma_waveform(
+  ffi.Pointer<ffi.Uint8> rgba,
+  int width,
+  int height,
+  int stride,
+  ffi.Pointer<ffi.Uint32> out,
+  int columns,
+);
+
+@ffi.Native<
+    ffi.Int32 Function(
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+    )>()
+external int camera_pro_compute_false_color(
+  ffi.Pointer<ffi.Uint8> rgba,
+  ffi.Pointer<ffi.Uint8> outRgba,
+  int width,
+  int height,
+  int stride,
+);
+
 // ── Format conversion ──────────────────────────────────────────────────────
 
 @ffi.Native<
