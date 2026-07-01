@@ -48,28 +48,31 @@ Goal: establish the shared C core, Dart API contract, and build pipeline such th
 
 ---
 
-## Phase 2 — iOS / macOS Backend (AVFoundation) 🚧
+## Phase 2 — iOS / macOS Backend (AVFoundation) 🚧 (control-plane ✅)
 
-Goal: first real device backend. Unblocks actual camera preview, photo capture, and capability reporting on Apple platforms.
+Goal: first real device backend. The **control-plane is implemented and verified**
+(`src/platform/apple/camera_hal_apple.m` + `AppleCameraBackend`) — device
+enumeration, capability reporting, and manual controls run against real
+AVFoundation. The preview-texture and capture pipeline remain the open work.
 
-**What would unblock this phase:**
-- Implement `camera_hal.h` against `AVCaptureSession` / `AVCaptureDevice` in Objective-C or Swift-callable C.
-- Register a Flutter texture via `FlutterTextureRegistry` and expose `textureId` from `CameraProController`.
-- Wire `capturePhoto()` through to `AVCapturePhotoOutput`.
-- Populate `CameraCapabilities` from `AVCaptureDevice.formats` and `activeFormat` limits.
+**Done ✅** — verified on real Mac cameras + compiled against the iPhoneOS SDK
+(see `src/platform/apple/README.md`).
 
 | Item | Status |
 |------|--------|
-| AVFoundation HAL implementation | ❌ |
+| AVFoundation HAL implementation (control-plane) | ✅ |
+| Device enumeration (`AVCaptureDeviceDiscoverySession`) | ✅ |
+| Real `CameraCapabilities` from `AVCaptureDevice` / `activeFormat` | ✅ |
+| ISO / shutter / EV / WB setters wired to `AVCaptureDevice` (iOS) | ✅ |
+| Zoom wired to `videoZoomFactor` (iOS) | ✅ |
+| Torch control (iOS) | ✅ |
+| Focus distance wired to `lensPosition` (iOS) | ✅ |
+| `AppleCameraBackend` (Dart FFI) + auto-selection on macOS/iOS | ✅ |
 | Flutter texture registration (iOS/macOS) | ❌ |
 | Camera permission request flow | ❌ |
 | Live preview via `textureId` | ❌ |
-| `capturePhoto()` → JPEG output | ❌ |
-| Real `CameraCapabilities` from device | ❌ |
-| ISO / shutter / EV / WB setters wired to `AVCaptureDevice` | ❌ |
-| Zoom wired to `videoZoomFactor` | ❌ |
-| Flash / torch control | ❌ |
-| Focus distance wired to `lensPosition` | ❌ |
+| `capturePhoto()` → JPEG output (`AVCapturePhotoOutput`) | ❌ |
+| Flash capture | ❌ |
 | Thermal state monitoring (`ProcessInfo.thermalState`) | ❌ |
 
 ---

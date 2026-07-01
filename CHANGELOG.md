@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+**Apple (iOS + macOS) AVFoundation backend — first real platform HAL**
+
+- `src/platform/apple/camera_hal_apple.m`: shared Objective-C implementation of the full `camera_hal.h` contract against AVFoundation. Device enumeration (`AVCaptureDeviceDiscoverySession`), open/close, capability reporting, and manual controls (ISO, shutter, exposure compensation, focus lens position, white-balance temperature, zoom, torch). iOS-only manual-control APIs are guarded with `#if TARGET_OS_IOS`; on macOS they are honestly reported as unsupported (degrading to `CameraTier.basic`).
+- `AppleCameraBackend` (`lib/src/platform/apple/apple_camera_backend.dart`): drives the HAL over FFI; auto-selected on macOS/iOS by `CameraPro.create()` / `availableCameras()`.
+- FFI bindings for the HAL and Apple accessors (`lib/src/ffi/hal_bindings.dart`), including the `AppleCaps` struct mirror.
+- `hook/build.dart` now selects the AVFoundation backend (Objective-C + AVFoundation/CoreMedia/CoreVideo/Foundation frameworks, ARC) for Apple targets and the stub backend elsewhere.
+- Native harness `src/platform/apple/apple_hal_test.c` and Dart FFI test `test/ffi/apple_backend_test.dart`.
+
+### Verified
+
+- macOS: HAL compiled and **run against real host cameras** (FaceTime HD + external/virtual), enumerating devices and reading capabilities; `AppleCameraBackend` exercised end-to-end via `flutter test`.
+- iOS: the shared `.m` compiles clean against the iPhoneOS SDK (manual-control branch), pending on-device validation.
+- Dart test count: **61 passing** (was 59); `flutter analyze` clean.
+
+### Still roadmap for Apple
+
+Preview-texture rendering (`CVMetalTextureCache` → Flutter `TextureRegistry`), photo/video capture outputs, Metal GPU visual aids, and the camera permission flow.
+
 ## [0.1.0] - 2026-07-01
 
 ### Added

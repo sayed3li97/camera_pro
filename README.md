@@ -43,7 +43,7 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | Tier selection (`determineTier`) | ✅ | Derived from capabilities |
 | Conformant stub HAL backend | ✅ | All HAL contract methods implemented as no-ops |
 | Android NDK Camera2 HAL | 🚧 | HAL contract defined; native side not wired |
-| Apple AVFoundation HAL (iOS/macOS) | 🚧 | HAL contract defined; native side not wired |
+| Apple AVFoundation HAL (iOS/macOS) | ✅* | Control-plane done & verified: enumeration, capabilities, manual controls. Preview/capture 🚧 |
 | Windows Media Foundation HAL | 🚧 | HAL contract defined; native side not wired |
 | Linux V4L2 HAL | 🚧 | HAL contract defined; native side not wired |
 | Web (getUserMedia) HAL | 🚧 | HAL contract defined; native side not wired |
@@ -111,8 +111,8 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | Platform | Camera access | C core + stub | Notes |
 |---|---|---|---|
 | Android | 🚧 | ✅ | NDK Camera2 HAL designed, not wired |
-| iOS | 🚧 | ✅ | AVFoundation HAL designed, not wired |
-| macOS | 🚧 | ✅ | AVFoundation HAL designed, not wired; C core compiles and is verified on macOS arm64 |
+| iOS | ✅ controls | ✅ | AVFoundation HAL: enumeration + capabilities + manual controls (compiled vs iOS SDK); preview/capture roadmap |
+| macOS | ✅ controls | ✅ | AVFoundation HAL verified on real cameras; manual controls are iOS-only, so macOS reports basic tier |
 | Windows | 🚧 | ✅ | Media Foundation HAL designed, not wired |
 | Linux | 🚧 | ✅ | V4L2 HAL designed, not wired |
 | Web | 🚧 | ✅ (scalar only) | getUserMedia HAL designed; SIMD requires WASM target |
@@ -203,11 +203,14 @@ The following results were produced on macOS arm64 with Flutter 3.44.1 / Dart 3.
 |---|---|
 | C core (`clang -std=c11 -O2 -Wall -Wextra -Werror`) | **36/36 checks pass** |
 | NEON histogram cross-check vs scalar reference | Bit-exact on arm64 |
-| Dart unit + FFI tests (`flutter test`) | **59/59 pass** (54 pure-logic, 5 real FFI through compiled core) |
+| Dart unit + FFI tests (`flutter test`) | **61/61 pass** (54 pure-logic, 7 real FFI through compiled core) |
 | `flutter analyze` (package) | **No issues** |
 | `flutter analyze` (example app) | **No issues** |
 | Example app widget test | **Pass** |
 | native-assets end-to-end (hook/build.dart → libcamera_pro_core.dylib → FFI) | **Verified** |
+| AVFoundation HAL harness on real Mac cameras | **Pass** (enumerated FaceTime HD + external) |
+| `AppleCameraBackend` via Dart FFI (`flutter test`, macOS) | **Pass** |
+| Apple HAL iOS branch (iPhoneOS SDK compile) | **Compiles** |
 
 ---
 
