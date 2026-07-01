@@ -154,6 +154,7 @@ external int camera_pro_compute_zebra(
       ffi.Int32,
       ffi.Int32,
       ffi.Int32,
+      ffi.Int32,
       ffi.Pointer<ffi.Uint32>,
       ffi.Int32,
     )>()
@@ -162,6 +163,7 @@ external int camera_pro_compute_luma_waveform(
   int width,
   int height,
   int stride,
+  int isBgra,
   ffi.Pointer<ffi.Uint32> out,
   int columns,
 );
@@ -173,6 +175,7 @@ external int camera_pro_compute_luma_waveform(
       ffi.Int32,
       ffi.Int32,
       ffi.Int32,
+      ffi.Int32,
     )>()
 external int camera_pro_compute_false_color(
   ffi.Pointer<ffi.Uint8> rgba,
@@ -180,6 +183,7 @@ external int camera_pro_compute_false_color(
   int width,
   int height,
   int stride,
+  int isBgra,
 );
 
 // ── Digital manual-control adjustments ──────────────────────────────────────

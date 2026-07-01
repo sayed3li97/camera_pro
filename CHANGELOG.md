@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Live false-color + waveform overlays (visual-aids suite complete)**
+
+- Added an `is_bgra` parameter to `camera_pro_compute_false_color` and `camera_pro_compute_luma_waveform` for correct colours/luma on BGRA preview frames.
+- The example gains **False color** (full-frame exposure-zone map) and **Waveform** (luminance waveform monitor) toggles, computed per frame in C. Verified live on the Mac camera: false color renders the correct exposure zones (green mid / yellow near-clip / pink highlight / blue shadow / red clip) and the waveform trace tracks the scene. This completes the visual-aids suite: **histogram · focus peaking · zebra · false color · waveform**, all live.
+
 **Live focus-peaking + zebra overlays**
 
 - `camera_pro_compute_focus_peaking` and `camera_pro_compute_zebra` gained an `is_bgra` parameter so the overlay colours are correct on BGRA preview frames, exposed via `NativeCore.focusPeaking` / `NativeCore.zebra`.

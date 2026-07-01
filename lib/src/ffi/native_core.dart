@@ -79,6 +79,7 @@ class NativeCore {
     required int width,
     required int height,
     int columns = 256,
+    bool isBgra = false,
     int stride = 0,
   }) {
     final effectiveStride = stride == 0 ? width * 4 : stride;
@@ -87,7 +88,7 @@ class NativeCore {
     try {
       src.asTypedList(rgba.length).setAll(0, rgba);
       bindings.camera_pro_compute_luma_waveform(
-        src, width, height, effectiveStride, out, columns,
+        src, width, height, effectiveStride, isBgra ? 1 : 0, out, columns,
       );
       return WaveformData(
         columns: columns,
@@ -104,6 +105,7 @@ class NativeCore {
     Uint8List rgba, {
     required int width,
     required int height,
+    bool isBgra = false,
     int stride = 0,
   }) {
     final effectiveStride = stride == 0 ? width * 4 : stride;
@@ -112,7 +114,7 @@ class NativeCore {
     try {
       src.asTypedList(rgba.length).setAll(0, rgba);
       bindings.camera_pro_compute_false_color(
-        src, out, width, height, effectiveStride,
+        src, out, width, height, effectiveStride, isBgra ? 1 : 0,
       );
       return Uint8List.fromList(out.asTypedList(width * height * 4));
     } finally {

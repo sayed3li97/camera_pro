@@ -181,7 +181,7 @@ static void test_waveform_falsecolor(void) {
 
     const int32_t cols = 8;
     uint32_t* wf = (uint32_t*)malloc((size_t)cols * 256 * sizeof(uint32_t));
-    CHECK(camera_pro_compute_luma_waveform(in, W, H, stride, wf, cols) == CAMERA_OK,
+    CHECK(camera_pro_compute_luma_waveform(in, W, H, stride, 0, wf, cols) == CAMERA_OK,
           "waveform returns OK");
     /* Solid gray => every column has all its pixels in luma bin 128. */
     int wf_ok = 1;
@@ -195,17 +195,17 @@ static void test_waveform_falsecolor(void) {
     free(wf);
 
     uint8_t* out = (uint8_t*)malloc((size_t)stride * H);
-    CHECK(camera_pro_compute_false_color(in, out, W, H, stride) == CAMERA_OK,
+    CHECK(camera_pro_compute_false_color(in, out, W, H, stride, 0) == CAMERA_OK,
           "false color returns OK");
     /* Mid gray (128) falls in the 100..149 band => gray 0xC0C0C0. */
     CHECK(out[0] == 0xC0 && out[1] == 0xC0 && out[2] == 0xC0, "mid gray => gray zone");
 
     for (int32_t i = 0; i < W * H; i++) in[i * 4 + 0] = in[i * 4 + 1] = in[i * 4 + 2] = 255;
-    camera_pro_compute_false_color(in, out, W, H, stride);
+    camera_pro_compute_false_color(in, out, W, H, stride, 0);
     CHECK(out[0] == 0xFF && out[1] == 0x00 && out[2] == 0x00, "clipped white => red zone");
 
     for (int32_t i = 0; i < W * H; i++) in[i * 4 + 0] = in[i * 4 + 1] = in[i * 4 + 2] = 0;
-    camera_pro_compute_false_color(in, out, W, H, stride);
+    camera_pro_compute_false_color(in, out, W, H, stride, 0);
     CHECK(out[2] == 0x60, "crushed black => purple zone");
 
     free(in);

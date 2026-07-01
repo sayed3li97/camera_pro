@@ -46,6 +46,9 @@ class _CapabilityPageState extends State<CapabilityPage> {
   String? _savedPath;
   bool _focusPeaking = false;
   bool _zebra = false;
+  bool _falseColor = false;
+  bool _waveform = false;
+  WaveformData? _wf;
 
   // Live manual-control state.
   double _iso = 100;
@@ -100,7 +103,7 @@ class _CapabilityPageState extends State<CapabilityPage> {
     final frame = controller.latestPreviewFrame();
     if (frame == null) return;
 
-    // Live histogram, computed by the native C core every few frames.
+    // Live histogram (+ optional waveform), computed by the native C core.
     if (_frames % 3 == 0) {
       try {
         _hist = NativeCore.histogramFromRgba(
@@ -108,8 +111,17 @@ class _CapabilityPageState extends State<CapabilityPage> {
           width: frame.width,
           height: frame.height,
         );
+        if (_waveform) {
+          _wf = NativeCore.waveformFromRgba(
+            frame.bytes,
+            width: frame.width,
+            height: frame.height,
+            columns: 128,
+            isBgra: frame.isBgra,
+          );
+        }
       } on Object {
-        // ignore — histogram is best-effort
+        // ignore — visual aids are best-effort
       }
     }
 
@@ -130,6 +142,9 @@ class _CapabilityPageState extends State<CapabilityPage> {
           height: frame.height,
           isBgra: frame.isBgra,
           frameCounter: _frames);
+    } else if (_falseColor) {
+      pixels = NativeCore.falseColorFromRgba(frame.bytes,
+          width: frame.width, height: frame.height, isBgra: frame.isBgra);
     }
 
     _decoding = true;
@@ -197,10 +212,16 @@ class _CapabilityPageState extends State<CapabilityPage> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: <Widget>[
-                _PreviewArea(image: _preview, frames: _frames, hist: _hist),
+                _PreviewArea(
+                  image: _preview,
+                  frames: _frames,
+                  hist: _hist,
+                  waveform: _waveform ? _wf : null,
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
+                  runSpacing: 4,
                   children: <Widget>[
                     FilterChip(
                       label: const Text('Focus peaking'),
@@ -208,7 +229,7 @@ class _CapabilityPageState extends State<CapabilityPage> {
                       selected: _focusPeaking,
                       onSelected: (v) => setState(() {
                         _focusPeaking = v;
-                        if (v) _zebra = false;
+                        if (v) _zebra = _falseColor = false;
                       }),
                     ),
                     FilterChip(
@@ -217,7 +238,25 @@ class _CapabilityPageState extends State<CapabilityPage> {
                       selected: _zebra,
                       onSelected: (v) => setState(() {
                         _zebra = v;
-                        if (v) _focusPeaking = false;
+                        if (v) _focusPeaking = _falseColor = false;
+                      }),
+                    ),
+                    FilterChip(
+                      label: const Text('False color'),
+                      avatar: const Icon(Icons.palette, size: 16),
+                      selected: _falseColor,
+                      onSelected: (v) => setState(() {
+                        _falseColor = v;
+                        if (v) _focusPeaking = _zebra = false;
+                      }),
+                    ),
+                    FilterChip(
+                      label: const Text('Waveform'),
+                      avatar: const Icon(Icons.show_chart, size: 16),
+                      selected: _waveform,
+                      onSelected: (v) => setState(() {
+                        _waveform = v;
+                        if (!v) _wf = null;
                       }),
                     ),
                   ],
@@ -418,12 +457,17 @@ class _CapabilityPageState extends State<CapabilityPage> {
 }
 
 class _PreviewArea extends StatelessWidget {
-  const _PreviewArea(
-      {required this.image, required this.frames, required this.hist});
+  const _PreviewArea({
+    required this.image,
+    required this.frames,
+    required this.hist,
+    required this.waveform,
+  });
 
   final ui.Image? image;
   final int frames;
   final HistogramData? hist;
+  final WaveformData? waveform;
 
   @override
   Widget build(BuildContext context) {
@@ -483,6 +527,20 @@ class _PreviewArea extends StatelessWidget {
                           child: CustomPaint(painter: _HistogramPainter(hist!)),
                         ),
                       ),
+                    if (waveform != null)
+                      Positioned(
+                        left: 8,
+                        right: 8,
+                        bottom: 8,
+                        height: 72,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: CustomPaint(painter: _WaveformPainter(waveform!)),
+                        ),
+                      ),
                   ],
                 ),
         ),
@@ -525,6 +583,39 @@ class _HistogramPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_HistogramPainter oldDelegate) => true;
+}
+
+/// Paints the native-computed luminance waveform (x = column, y = luma).
+class _WaveformPainter extends CustomPainter {
+  _WaveformPainter(this.wf);
+
+  final WaveformData wf;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Normalise per-column so faint traces stay visible.
+    var peak = 1;
+    for (final v in wf.bins) {
+      if (v > peak) peak = v;
+    }
+    final dx = size.width / wf.columns;
+    final paint = Paint()..strokeWidth = 1;
+    for (var c = 0; c < wf.columns; c++) {
+      final x = c * dx + dx / 2;
+      for (var luma = 0; luma < 256; luma++) {
+        final count = wf.at(c, luma);
+        if (count == 0) continue;
+        final intensity = (count / peak).clamp(0.05, 1.0);
+        // y: luma 255 at top, 0 at bottom.
+        final y = size.height * (1 - luma / 255.0);
+        paint.color = Colors.greenAccent.withValues(alpha: intensity * 0.9);
+        canvas.drawRect(Rect.fromLTWH(x, y, dx, 1), paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WaveformPainter oldDelegate) => true;
 }
 
 class _InfoCard extends StatelessWidget {

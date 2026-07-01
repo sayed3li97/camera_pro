@@ -111,6 +111,8 @@ Depends on Phase 2 or 3 completing at least one platform backend.
 | Histogram live feed from camera frames | ✅ Native C compute per frame; live overlay in the example |
 | Focus peaking overlay | ✅ Sobel C kernel per frame; toggleable cyan overlay (channel-order aware) |
 | Zebra overexposure overlay | ✅ C kernel per frame; toggleable overlay |
+| False-color exposure map overlay | ✅ C kernel per frame; toggleable full-frame overlay |
+| Luminance waveform monitor overlay | ✅ C kernel per frame; toggleable graph overlay |
 | Auto-generated FFI bindings (replace hand-written) | 🚧 `ffigen.yaml` present; run blocked on stable codegen |
 
 ---

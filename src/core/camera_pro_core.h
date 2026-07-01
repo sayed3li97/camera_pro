@@ -168,6 +168,7 @@ camera_pro_compute_luma_waveform(
     int32_t        width,
     int32_t        height,
     int32_t        stride,
+    int32_t        is_bgra,    /* 1 = B,G,R,A channel order; 0 = R,G,B,A */
     uint32_t*      out,        /* columns * 256 bins */
     int32_t        columns);
 
@@ -182,7 +183,8 @@ camera_pro_compute_false_color(
     uint8_t*       out_rgba,
     int32_t        width,
     int32_t        height,
-    int32_t        stride);
+    int32_t        stride,
+    int32_t        is_bgra);   /* 1 = B,G,R,A channel order; 0 = R,G,B,A */
 
 /* ── Format conversion (scalar BT.601) ─────────────────────────────────────
  * All converters write tightly-packed RGBA8888 (stride = width*4).

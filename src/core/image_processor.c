@@ -336,12 +336,14 @@ int32_t camera_pro_box_blur(
 /* ── Luminance waveform monitor ────────────────────────────────────────── */
 int32_t camera_pro_compute_luma_waveform(
     const uint8_t* rgba, int32_t width, int32_t height, int32_t stride,
-    uint32_t* out, int32_t columns) {
+    int32_t is_bgra, uint32_t* out, int32_t columns) {
 
     if (!rgba || !out || width <= 0 || height <= 0 || columns <= 0)
         return CAMERA_ERROR_INVALID_PARAMETER;
     if (stride <= 0) stride = width * 4;
 
+    const int ri = is_bgra ? 2 : 0;
+    const int bi = is_bgra ? 0 : 2;
     memset(out, 0, (size_t)columns * 256 * sizeof(uint32_t));
 
     for (int32_t y = 0; y < height; y++) {
@@ -349,7 +351,7 @@ int32_t camera_pro_compute_luma_waveform(
         for (int32_t x = 0; x < width; x++) {
             int32_t col = (int32_t)(((int64_t)x * columns) / width);
             if (col >= columns) col = columns - 1;
-            uint8_t luma = luma_u8(row[x * 4 + 0], row[x * 4 + 1], row[x * 4 + 2]);
+            uint8_t luma = luma_u8(row[x * 4 + ri], row[x * 4 + 1], row[x * 4 + bi]);
             out[(size_t)col * 256 + luma]++;
         }
     }
@@ -370,24 +372,26 @@ static void false_color_for(uint8_t y, uint8_t* r, uint8_t* g, uint8_t* b) {
 
 int32_t camera_pro_compute_false_color(
     const uint8_t* rgba, uint8_t* out_rgba,
-    int32_t width, int32_t height, int32_t stride) {
+    int32_t width, int32_t height, int32_t stride, int32_t is_bgra) {
 
     if (!rgba || !out_rgba || width <= 0 || height <= 0)
         return CAMERA_ERROR_INVALID_PARAMETER;
     if (stride <= 0) stride = width * 4;
 
+    const int ri = is_bgra ? 2 : 0;
+    const int bi = is_bgra ? 0 : 2;
     const int32_t out_stride = width * 4;
     for (int32_t y = 0; y < height; y++) {
         const uint8_t* row = rgba + (size_t)y * stride;
         uint8_t* orow = out_rgba + (size_t)y * out_stride;
         for (int32_t x = 0; x < width; x++) {
-            uint8_t luma = luma_u8(row[x * 4 + 0], row[x * 4 + 1], row[x * 4 + 2]);
+            uint8_t luma = luma_u8(row[x * 4 + ri], row[x * 4 + 1], row[x * 4 + bi]);
             uint8_t r, g, b;
             false_color_for(luma, &r, &g, &b);
-            orow[x * 4 + 0] = r;
-            orow[x * 4 + 1] = g;
-            orow[x * 4 + 2] = b;
-            orow[x * 4 + 3] = row[x * 4 + 3];
+            orow[x * 4 + ri] = r;
+            orow[x * 4 + 1]  = g;
+            orow[x * 4 + bi] = b;
+            orow[x * 4 + 3]  = row[x * 4 + 3];
         }
     }
     return CAMERA_OK;

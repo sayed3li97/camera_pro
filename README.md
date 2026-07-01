@@ -74,6 +74,8 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | Live histogram overlay from camera frames | ✅ | Native compute per preview frame → painted overlay in the example |
 | Live focus-peaking overlay (camera frames) | ✅ | Sobel C kernel per frame, toggleable cyan overlay; verified on the live feed |
 | Live zebra over-exposure overlay (camera frames) | ✅ | C kernel per frame, toggleable |
+| Live false-color exposure map (camera frames) | ✅ | C kernel per frame; verified rendering correct exposure zones |
+| Live waveform monitor (camera frames) | ✅ | C kernel per frame; toggleable graph overlay |
 | Luminance waveform monitor (C core) | ✅ | `camera_pro_compute_luma_waveform` → `WaveformData` |
 | False-color exposure map (C core) | ✅ | `camera_pro_compute_false_color` |
 | GPU compute focus peaking (Metal/Vulkan/D3D11/WebGPU) | 🚧 | Architecture planned; shaders not written |
