@@ -32,7 +32,7 @@ enum WhiteBalanceMode {
 enum FlashMode { off, auto, on }
 
 /// Still-image output format.
-enum ImageFormat { jpeg, heif, raw, rawPlusJpeg, proRaw }
+enum ImageFormat { jpeg, png, heif, raw, rawPlusJpeg, proRaw }
 
 /// Video codec.
 enum VideoCodec { h264, hevc, prores, av1 }

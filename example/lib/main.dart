@@ -42,6 +42,8 @@ class _CapabilityPageState extends State<CapabilityPage> {
   ui.Image? _preview;
   bool _decoding = false;
   int _frames = 0;
+  HistogramData? _hist;
+  String? _savedPath;
 
   // Live manual-control state.
   double _iso = 100;
@@ -95,6 +97,20 @@ class _CapabilityPageState extends State<CapabilityPage> {
     if (controller == null || _decoding) return;
     final frame = controller.latestPreviewFrame();
     if (frame == null) return;
+
+    // Live histogram, computed by the native C core every few frames.
+    if (_frames % 3 == 0) {
+      try {
+        _hist = NativeCore.histogramFromRgba(
+          frame.bytes,
+          width: frame.width,
+          height: frame.height,
+        );
+      } on Object {
+        // ignore — histogram is best-effort
+      }
+    }
+
     _decoding = true;
     ui.decodeImageFromPixels(
       frame.bytes,
@@ -121,7 +137,8 @@ class _CapabilityPageState extends State<CapabilityPage> {
     if (controller == null) return;
     setState(() => _error = null);
     try {
-      final photo = await controller.capturePhoto(format: ImageFormat.jpeg);
+      final photo = await controller.capturePhoto(format: ImageFormat.png);
+      setState(() => _savedPath = photo.path);
       _showSnack('Captured ${photo.width}x${photo.height} → ${photo.path}');
     } on CameraProError catch (e) {
       setState(() => _error = '${e.runtimeType}: ${e.message}');
@@ -159,7 +176,23 @@ class _CapabilityPageState extends State<CapabilityPage> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: <Widget>[
-                _PreviewArea(image: _preview, frames: _frames),
+                _PreviewArea(image: _preview, frames: _frames, hist: _hist),
+                if (_savedPath != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Row(
+                      children: <Widget>[
+                        const Icon(Icons.check_circle,
+                            color: Colors.greenAccent, size: 16),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text('Saved: $_savedPath',
+                              style: const TextStyle(
+                                  fontSize: 11, color: Colors.greenAccent)),
+                        ),
+                      ],
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 _InfoCard(
                   nativeVersion: _nativeVersion,
@@ -340,10 +373,12 @@ class _CapabilityPageState extends State<CapabilityPage> {
 }
 
 class _PreviewArea extends StatelessWidget {
-  const _PreviewArea({required this.image, required this.frames});
+  const _PreviewArea(
+      {required this.image, required this.frames, required this.hist});
 
   final ui.Image? image;
   final int frames;
+  final HistogramData? hist;
 
   @override
   Widget build(BuildContext context) {
@@ -389,12 +424,62 @@ class _PreviewArea extends StatelessWidget {
                                 color: Colors.redAccent, fontSize: 12)),
                       ),
                     ),
+                    if (hist != null)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          width: 128,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: CustomPaint(painter: _HistogramPainter(hist!)),
+                        ),
+                      ),
                   ],
                 ),
         ),
       ),
     );
   }
+}
+
+/// Paints the native-computed luminance + RGB histogram.
+class _HistogramPainter extends CustomPainter {
+  _HistogramPainter(this.hist);
+
+  final HistogramData hist;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final peak = hist.peak;
+    if (peak == 0) return;
+    final channels = <(List<int>, Color)>[
+      (hist.red, Colors.red.withValues(alpha: 0.6)),
+      (hist.green, Colors.green.withValues(alpha: 0.6)),
+      (hist.blue, Colors.blue.withValues(alpha: 0.6)),
+      (hist.luminance, Colors.white.withValues(alpha: 0.85)),
+    ];
+    final dx = size.width / 256.0;
+    for (final (bins, color) in channels) {
+      final paint = Paint()
+        ..color = color
+        ..strokeWidth = dx
+        ..style = PaintingStyle.stroke;
+      for (var i = 0; i < 256; i++) {
+        final h = (bins[i] / peak) * size.height;
+        if (h <= 0) continue;
+        final x = i * dx + dx / 2;
+        canvas.drawLine(
+            Offset(x, size.height), Offset(x, size.height - h), paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_HistogramPainter oldDelegate) => true;
 }
 
 class _InfoCard extends StatelessWidget {

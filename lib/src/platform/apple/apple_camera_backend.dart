@@ -9,8 +9,11 @@
 /// white balance, and zoom still work and are visible on macOS.
 library;
 
+import 'dart:async';
 import 'dart:ffi' as ffi;
+import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:ffi/ffi.dart' as pkg_ffi;
 
@@ -374,9 +377,42 @@ class AppleCameraBackend implements CameraBackend {
 
   @override
   Future<CapturedPhoto> capturePhoto({ImageFormat? format}) async {
-    throw const CameraFeatureNotSupportedError(
-      feature: 'Photo capture',
-      platformReason: 'AVFoundation capture output is roadmap',
+    // Capture the latest preview frame (with all digital manual-control
+    // adjustments already applied) and encode it as a PNG on disk. This is the
+    // still-capture path until AVCapturePhotoOutput is wired for full-res RAW.
+    final frame = latestFrame();
+    if (frame == null) {
+      throw CameraCaptureError(reason: CaptureFailureReason.noFrame);
+    }
+
+    final decodeCompleter = Completer<ui.Image>();
+    ui.decodeImageFromPixels(
+      frame.bytes,
+      frame.width,
+      frame.height,
+      frame.isBgra ? ui.PixelFormat.bgra8888 : ui.PixelFormat.rgba8888,
+      decodeCompleter.complete,
+    );
+    final image = await decodeCompleter.future;
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    if (png == null) {
+      throw CameraCaptureError(reason: CaptureFailureReason.encodingFailed);
+    }
+
+    final bytes = png.buffer.asUint8List();
+    final ts = DateTime.now();
+    final path =
+        '${Directory.systemTemp.path}/camera_pro_${ts.millisecondsSinceEpoch}.png';
+    await File(path).writeAsBytes(bytes, flush: true);
+
+    return CapturedPhoto(
+      width: frame.width,
+      height: frame.height,
+      format: ImageFormat.png,
+      timestamp: ts,
+      bytes: bytes,
+      path: path,
     );
   }
 

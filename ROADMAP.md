@@ -68,10 +68,11 @@ AVFoundation. The preview-texture and capture pipeline remain the open work.
 | Torch control (iOS) | ✅ |
 | Focus distance wired to `lensPosition` (iOS) | ✅ |
 | `AppleCameraBackend` (Dart FFI) + auto-selection on macOS/iOS | ✅ |
-| Flutter texture registration (iOS/macOS) | ❌ |
-| Camera permission request flow | ❌ |
-| Live preview via `textureId` | ❌ |
-| `capturePhoto()` → JPEG output (`AVCapturePhotoOutput`) | ❌ |
+| Camera permission request flow | ✅ |
+| Live preview (frames over FFI → `dart:ui`; no TextureRegistry needed) | ✅ |
+| `capturePhoto()` → PNG output (frame grab, with adjustments applied) | ✅ |
+| Flutter texture registration (`textureId`, zero-copy Metal path) | ❌ |
+| `capturePhoto()` → full-res `AVCapturePhotoOutput` (JPEG/HEIF/RAW) | ❌ |
 | Flash capture | ❌ |
 | Thermal state monitoring (`ProcessInfo.thermalState`) | ❌ |
 
@@ -107,8 +108,8 @@ Depends on Phase 2 or 3 completing at least one platform backend.
 | libjpeg-turbo for fast JPEG encode | ❌ |
 | Burst capture | ❌ |
 | Bracket / HDR capture | ❌ |
-| Histogram live feed from camera frames | 🚧 C compute ready; frame pipeline not wired |
-| Focus peaking overlay | 🚧 C compute ready; texture compositing not wired |
+| Histogram live feed from camera frames | ✅ Native C compute per frame; live overlay in the example |
+| Focus peaking overlay | 🚧 C compute ready; live overlay not wired |
 | Zebra overexposure overlay | 🚧 C compute ready; texture compositing not wired |
 | Auto-generated FFI bindings (replace hand-written) | 🚧 `ffigen.yaml` present; run blocked on stable codegen |
 

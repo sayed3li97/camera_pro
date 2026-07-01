@@ -60,10 +60,10 @@ void main() {
     expect(s.zoom, 2.0);
     expect(s.focusDistance, 0.9);
 
-    // A genuinely unwired feature still surfaces a typed error (not a crash).
+    // Capture with no active frame stream surfaces a typed error (not a crash).
     await expectLater(
-      controller.capturePhoto(format: ImageFormat.jpeg),
-      throwsA(isA<CameraFeatureNotSupportedError>()),
+      controller.capturePhoto(format: ImageFormat.png),
+      throwsA(isA<CameraCaptureError>()),
     );
   });
 }

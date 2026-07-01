@@ -55,6 +55,7 @@ enum CaptureFailureReason {
   focusFailed('Unable to achieve focus'),
   interrupted('Interrupted before completion'),
   encodingFailed('Image/video encoding failed'),
+  noFrame('No camera frame available to capture'),
   unknown('Unknown capture failure');
 
   const CaptureFailureReason(this.description);

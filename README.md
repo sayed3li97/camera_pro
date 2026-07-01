@@ -71,6 +71,7 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | Sobel focus peaking (C core) | ✅ | `camera_pro_compute_focus_peaking` |
 | Zebra highlight clipping (C core) | ✅ | `camera_pro_compute_zebra` |
 | RGBA histogram (C core) | ✅ | `camera_pro_compute_histogram_rgba` + `_scalar` |
+| Live histogram overlay from camera frames | ✅ | Native compute per preview frame → painted overlay in the example |
 | Luminance waveform monitor (C core) | ✅ | `camera_pro_compute_luma_waveform` → `WaveformData` |
 | False-color exposure map (C core) | ✅ | `camera_pro_compute_false_color` |
 | GPU compute focus peaking (Metal/Vulkan/D3D11/WebGPU) | 🚧 | Architecture planned; shaders not written |
@@ -81,7 +82,8 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | Feature | Status | Notes |
 |---|---|---|
 | `capturePhoto()` API surface | ✅ | Method exists, capability-guarded, typed error on failure |
-| Actual JPEG capture | 🚧 | Requires platform HAL |
+| Photo capture to disk (macOS/iOS) | ✅ | Frame grab → PNG on disk (with manual adjustments applied); verified saving a 1920×1080 PNG |
+| Full-res JPEG/HEIF capture (`AVCapturePhotoOutput`) | 🚧 | Frame-grab capture works today; full-res output is roadmap |
 | RAW/DNG capture | 🚧 | API modelled (`ImageFormat.raw`); libtiff/libexif not integrated |
 | EXIF embedding | 🚧 | Not started |
 | libjpeg-turbo integration | 🚧 | Not integrated |

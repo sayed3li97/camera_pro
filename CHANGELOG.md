@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Photo capture + live histogram**
+
+- `capturePhoto()` is wired on the Apple backend: it grabs the latest preview frame (with digital manual-control adjustments applied), encodes a PNG via `dart:ui`, and writes it to disk, returning a `CapturedPhoto` with path + bytes. Verified on macOS — the example's Capture button saves a real 1920×1080 PNG. Full-res `AVCapturePhotoOutput`/RAW remains roadmap. New `ImageFormat.png` and `CaptureFailureReason.noFrame`.
+- Live histogram: the example computes the luminance + RGB histogram from each preview frame via the native C core (`camera_pro_compute_histogram_rgba`) and paints it as an overlay — the first camera-frame → C-compute → UI visual aid wired end-to-end.
+
 **Full manual controls on macOS via a digital pipeline**
 
 - Researched macOS camera controls across all three layers — AVFoundation (manual controls `API_UNAVAILABLE(macos)`), CoreMediaIO (`kCMIOExposureControlClassID`/`Gain`/`WhiteBalance`… exist but the built-in/virtual/Continuity cameras expose **0** control objects), and IOKit/USB (**0** UVC devices). Sensor-level control genuinely requires hardware that isn't present.
