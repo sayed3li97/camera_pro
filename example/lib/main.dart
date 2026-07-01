@@ -51,7 +51,14 @@ class _CapabilityPageState extends State<CapabilityPage> {
       _nativeVersion = 'native core unavailable ($e)';
     }
 
-    final controller = await CameraPro.create();
+    CameraProController controller;
+    try {
+      controller = await CameraPro.create();
+    } on Object {
+      // No camera available (e.g. a sandbox without the camera entitlement) —
+      // fall back to the stub backend so the capability UI still renders.
+      controller = await CameraPro.create(backend: StubCameraBackend());
+    }
     if (!mounted) return;
     setState(() => _controller = controller);
   }
