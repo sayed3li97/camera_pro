@@ -9,6 +9,7 @@
 library;
 
 import 'dart:ffi' as ffi;
+import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart' as pkg_ffi;
 
@@ -183,6 +184,51 @@ class AppleCameraBackend implements CameraBackend {
   @override
   Future<void> stopPreview() async => _check(hal.camera_hal_stop_preview(_ctx));
 
+  // Reused scratch buffer for polling preview frames (avoids per-frame malloc).
+  ffi.Pointer<ffi.Uint8> _frameBuf = ffi.nullptr;
+  int _frameBufCap = 0;
+
+  @override
+  Future<void> startFrameStream() async {
+    // Requests camera permission (system prompt) and starts the session.
+    _check(hal.camera_hal_start_image_stream(
+      _ctx, 0, 0, 30, ffi.nullptr, ffi.nullptr));
+  }
+
+  @override
+  Future<void> stopFrameStream() async {
+    hal.camera_hal_stop_image_stream(_ctx);
+  }
+
+  @override
+  int get frameCount => hal.camera_pro_apple_frame_count(_ctx);
+
+  @override
+  PreviewFrame? latestFrame() {
+    if (_closed) return null;
+    // Ensure the scratch buffer can hold a 4K BGRA frame at most.
+    const maxBytes = 3840 * 2160 * 4;
+    if (_frameBufCap == 0) {
+      _frameBuf = pkg_ffi.malloc<ffi.Uint8>(maxBytes);
+      _frameBufCap = maxBytes;
+    }
+    final wPtr = pkg_ffi.calloc<ffi.Int32>();
+    final hPtr = pkg_ffi.calloc<ffi.Int32>();
+    try {
+      final bytes = hal.camera_pro_apple_copy_latest_frame(
+        _ctx, _frameBuf, _frameBufCap, wPtr, hPtr);
+      if (bytes <= 0) return null;
+      return PreviewFrame(
+        bytes: Uint8List.fromList(_frameBuf.asTypedList(bytes)),
+        width: wPtr.value,
+        height: hPtr.value,
+      );
+    } finally {
+      pkg_ffi.calloc.free(wPtr);
+      pkg_ffi.calloc.free(hPtr);
+    }
+  }
+
   @override
   Future<void> setExposureMode(ExposureMode mode) async {
     // Exposure mode is applied implicitly by the custom shutter/ISO setters.
@@ -258,7 +304,12 @@ class AppleCameraBackend implements CameraBackend {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    hal.camera_hal_stop_image_stream(_ctx);
     hal.camera_hal_close(_ctx);
     hal.camera_hal_destroy(_ctx);
+    if (_frameBufCap > 0) {
+      pkg_ffi.malloc.free(_frameBuf);
+      _frameBufCap = 0;
+    }
   }
 }

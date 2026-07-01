@@ -1,9 +1,12 @@
 // camera_pro example.
 //
-// Demonstrates the "Capability Passport" and the crash-proof API. It runs on
-// any platform: it uses the stub backend, so there is no live camera, but it
-// shows the real flow — query capabilities, pick a control tier, and attempt a
-// control/capture that surfaces a *typed* error instead of crashing.
+// Shows a LIVE preview from the native camera (frames delivered over FFI and
+// painted with dart:ui), the "Capability Passport", the control tier, and the
+// crash-proof typed-error handling. Falls back to a capabilities-only view when
+// no camera is available.
+import 'dart:async';
+import 'dart:ui' as ui;
+
 import 'package:camera_pro/camera_pro.dart';
 import 'package:flutter/material.dart';
 
@@ -35,6 +38,11 @@ class _CapabilityPageState extends State<CapabilityPage> {
   String _simd = 'unknown';
   String? _error;
 
+  Timer? _frameTimer;
+  ui.Image? _preview;
+  bool _decoding = false;
+  int _frames = 0;
+
   @override
   void initState() {
     super.initState();
@@ -42,8 +50,6 @@ class _CapabilityPageState extends State<CapabilityPage> {
   }
 
   Future<void> _init() async {
-    // Reading the native core exercises the FFI path. Guard it so the demo
-    // still renders if native assets weren't built for this host.
     try {
       _nativeVersion = CameraPro.nativeCoreVersion;
       _simd = CameraPro.simdKernel;
@@ -55,12 +61,43 @@ class _CapabilityPageState extends State<CapabilityPage> {
     try {
       controller = await CameraPro.create();
     } on Object {
-      // No camera available (e.g. a sandbox without the camera entitlement) —
-      // fall back to the stub backend so the capability UI still renders.
       controller = await CameraPro.create(backend: StubCameraBackend());
     }
     if (!mounted) return;
     setState(() => _controller = controller);
+
+    // Start the live preview stream (this triggers the OS camera-permission
+    // prompt on first run) and poll frames ~30x/sec.
+    await controller.startPreviewStream();
+    _frameTimer = Timer.periodic(const Duration(milliseconds: 33), (_) {
+      _pumpFrame();
+    });
+  }
+
+  void _pumpFrame() {
+    final controller = _controller;
+    if (controller == null || _decoding) return;
+    final frame = controller.latestPreviewFrame();
+    if (frame == null) return;
+    _decoding = true;
+    ui.decodeImageFromPixels(
+      frame.bytes,
+      frame.width,
+      frame.height,
+      frame.isBgra ? ui.PixelFormat.bgra8888 : ui.PixelFormat.rgba8888,
+      (image) {
+        _decoding = false;
+        if (!mounted) {
+          image.dispose();
+          return;
+        }
+        setState(() {
+          _preview?.dispose();
+          _preview = image;
+          _frames = controller.previewFrameCount;
+        });
+      },
+    );
   }
 
   Future<void> _attemptCapture() async {
@@ -71,7 +108,6 @@ class _CapabilityPageState extends State<CapabilityPage> {
       final photo = await controller.capturePhoto(format: ImageFormat.jpeg);
       _showSnack('Captured ${photo.width}x${photo.height} → ${photo.path}');
     } on CameraProError catch (e) {
-      // The whole point: an unsupported feature is a typed, recoverable error.
       setState(() => _error = '${e.runtimeType}: ${e.message}');
       _showSnack('Recovery: ${e.recovery.name}');
     }
@@ -84,6 +120,8 @@ class _CapabilityPageState extends State<CapabilityPage> {
 
   @override
   void dispose() {
+    _frameTimer?.cancel();
+    _preview?.dispose();
     _controller?.dispose();
     super.dispose();
   }
@@ -105,6 +143,8 @@ class _CapabilityPageState extends State<CapabilityPage> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: <Widget>[
+                _PreviewArea(image: _preview, frames: _frames),
+                const SizedBox(height: 12),
                 _InfoCard(
                   nativeVersion: _nativeVersion,
                   simd: _simd,
@@ -169,6 +209,64 @@ class _CapabilityPageState extends State<CapabilityPage> {
         color: value ? Colors.greenAccent : Colors.grey,
       ),
       title: Text(label),
+    );
+  }
+}
+
+class _PreviewArea extends StatelessWidget {
+  const _PreviewArea({required this.image, required this.frames});
+
+  final ui.Image? image;
+  final int frames;
+
+  @override
+  Widget build(BuildContext context) {
+    return AspectRatio(
+      aspectRatio: 4 / 3,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: image == null
+              ? const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Icon(Icons.videocam_off, size: 40, color: Colors.white54),
+                      SizedBox(height: 8),
+                      Text('Waiting for camera…\n(grant permission if prompted)',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white54)),
+                    ],
+                  ),
+                )
+              : Stack(
+                  fit: StackFit.expand,
+                  children: <Widget>[
+                    RawImage(image: image, fit: BoxFit.cover),
+                    Positioned(
+                      left: 8,
+                      top: 8,
+                      child: Container(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text('● LIVE  ·  $frames frames',
+                            style: const TextStyle(
+                                color: Colors.redAccent, fontSize: 12)),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
+      ),
     );
   }
 }

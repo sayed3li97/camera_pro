@@ -155,6 +155,21 @@ class CameraProController {
   /// The currently applied manual settings.
   CameraSettings get currentSettings => _settings;
 
+  // ── Live preview frames ─────────────────────────────────────────────────
+
+  /// Starts the live preview frame stream (requests camera permission on
+  /// platforms that need it). Frames are then available via [latestPreviewFrame].
+  Future<void> startPreviewStream() => _backend.startFrameStream();
+
+  /// Stops the live preview frame stream.
+  Future<void> stopPreviewStream() => _backend.stopFrameStream();
+
+  /// The most recent preview frame, or null if none has arrived yet.
+  PreviewFrame? latestPreviewFrame() => _backend.latestFrame();
+
+  /// Number of preview frames delivered so far.
+  int get previewFrameCount => _backend.frameCount;
+
   // ── Capability-guarded setters ─────────────────────────────────────────
 
   /// Sets manual ISO. Throws [CameraFeatureNotSupportedError] if the device has

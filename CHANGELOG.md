@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Live camera preview (macOS + iOS)**
+
+- The AVFoundation HAL now requests camera permission and runs an `AVCaptureVideoDataOutput`, delivering BGRA frames that the Dart side polls over FFI (`camera_pro_apple_copy_latest_frame`) and paints with `dart:ui` — no Flutter `TextureRegistry`/plugin channel required.
+- `CameraBackend` gains `startFrameStream` / `stopFrameStream` / `latestFrame` / `frameCount`, surfaced on `CameraProController` as `startPreviewStream()`, `latestPreviewFrame()`, and `previewFrameCount`; new `PreviewFrame` value type.
+- The example app renders a live viewfinder and was **verified streaming real frames from a Mac camera** (the earlier build could not open the camera because it never requested permission or started the session).
+
+### Notes on manual controls
+
+- Reconnaissance confirmed AVFoundation exposes **no** manual exposure/ISO/focus/WB controls on macOS (they are `API_UNAVAILABLE(macos)`), and the available cameras are not UVC/USB devices — so manual controls have no OS/hardware path on this Mac. They are implemented for iOS (compiled against the iOS SDK) and are the domain of external UVC webcams (IOKit) on desktop.
+
 **Shared C core visual aids**
 
 - Luminance waveform monitor (`camera_pro_compute_luma_waveform`) → `WaveformData` (per-column 256-bin luminance distribution), exposed via `NativeCore.waveformFromRgba`.

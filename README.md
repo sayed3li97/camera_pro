@@ -61,7 +61,8 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | Zoom setter (`setZoom`) | ✅ | Capability-guarded |
 | Flash mode setter (`setFlashMode`) | ✅ | Capability-guarded |
 | Aperture control | 🚧 | Capability modelled; no hardware exposes it on mobile |
-| Real hardware effect of setters | 🚧 | Setters validate and update state; HAL call is stub until platform HAL lands |
+| Real hardware effect of setters (iOS) | ✅ | Wired to `AVCaptureDevice` (custom exposure/ISO, lens position, WB gains, zoom, torch) — compiled against the iOS SDK |
+| Real hardware effect of setters (macOS) | ⛔ hardware | Measured: AVFoundation exposes **no** manual controls on macOS, and this Mac's cameras (FaceTime/ISP, virtual, Continuity) aren't UVC — so there is no manual-control path in the OS/hardware, at any API level. External UVC webcams (via IOKit) and iOS devices are where manual controls live. |
 
 ### Visual aids
 
@@ -73,7 +74,7 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | Luminance waveform monitor (C core) | ✅ | `camera_pro_compute_luma_waveform` → `WaveformData` |
 | False-color exposure map (C core) | ✅ | `camera_pro_compute_false_color` |
 | GPU compute focus peaking (Metal/Vulkan/D3D11/WebGPU) | 🚧 | Architecture planned; shaders not written |
-| Live viewfinder overlay | 🚧 | Depends on texture registration |
+| Live camera preview (macOS/iOS) | ✅ | AVFoundation frames → FFI → `dart:ui` (no TextureRegistry needed); verified streaming on real hardware |
 
 ### Capture
 
@@ -113,8 +114,8 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | Platform | Camera access | C core + stub | Notes |
 |---|---|---|---|
 | Android | 🚧 | ✅ | NDK Camera2 HAL designed, not wired |
-| iOS | ✅ controls | ✅ | AVFoundation HAL: enumeration + capabilities + manual controls (compiled vs iOS SDK); preview/capture roadmap |
-| macOS | ✅ controls | ✅ | AVFoundation HAL verified on real cameras; manual controls are iOS-only, so macOS reports basic tier |
+| iOS | ✅ controls + preview | ✅ | AVFoundation HAL: enumeration, capabilities, manual controls, live preview (compiled vs iOS SDK) |
+| macOS | ✅ preview | ✅ | Live preview verified streaming on real cameras; manual controls not exposed by macOS/hardware (see note above), so macOS reports basic tier |
 | Windows | 🚧 | ✅ | Media Foundation HAL designed, not wired |
 | Linux | 🚧 | ✅ | V4L2 HAL designed, not wired |
 | Web | 🚧 | ✅ (scalar only) | getUserMedia HAL designed; SIMD requires WASM target |
@@ -213,6 +214,8 @@ The following results were produced on macOS arm64 with Flutter 3.44.1 / Dart 3.
 | AVFoundation HAL harness on real Mac cameras | **Pass** (enumerated FaceTime HD + external) |
 | `AppleCameraBackend` via Dart FFI (`flutter test`, macOS) | **Pass** |
 | Apple HAL iOS branch (iPhoneOS SDK compile) | **Compiles** |
+| Live camera preview (example app, real Mac camera) | **Streaming** (frames flowing continuously into the Flutter UI) |
+| macOS manual-control availability (recon) | **Measured: none** — AVFoundation exposes no manual controls on macOS; no UVC cameras present |
 
 ---
 

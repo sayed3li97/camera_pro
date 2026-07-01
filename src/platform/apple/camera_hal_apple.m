@@ -20,6 +20,7 @@
  */
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
+#import <CoreVideo/CoreVideo.h>
 #import <Foundation/Foundation.h>
 #import <TargetConditionals.h>
 
@@ -45,9 +46,55 @@
 @property(nonatomic, assign) void* errorUd;
 @property(nonatomic, assign) camera_state_callback_t stateCb;
 @property(nonatomic, assign) void* stateUd;
+
+// Live preview
+@property(nonatomic, strong) AVCaptureVideoDataOutput* dataOutput;
+@property(nonatomic, strong) id frameDelegate;  // CPFrameDelegate
+@property(nonatomic, strong) dispatch_queue_t frameQueue;
 @end
 
 @implementation CPAppleContext
+@end
+
+// Receives CVPixelBuffers off the capture queue and keeps the latest frame as
+// tightly-packed BGRA under a lock for the FFI copy accessor.
+@interface CPFrameDelegate : NSObject <AVCaptureVideoDataOutputSampleBufferDelegate>
+@property(nonatomic, strong) NSMutableData* latest;
+@property(nonatomic, assign) int32_t width;
+@property(nonatomic, assign) int32_t height;
+@property(atomic, assign) int64_t frameCount;
+@property(nonatomic, strong) NSLock* lock;
+@end
+
+@implementation CPFrameDelegate
+- (instancetype)init {
+  if ((self = [super init])) { _lock = [NSLock new]; }
+  return self;
+}
+- (void)captureOutput:(AVCaptureOutput*)output
+    didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
+       fromConnection:(AVCaptureConnection*)connection {
+  (void)output; (void)connection;
+  CVImageBufferRef img = CMSampleBufferGetImageBuffer(sampleBuffer);
+  if (!img) return;
+  CVPixelBufferLockBaseAddress(img, kCVPixelBufferLock_ReadOnly);
+  const size_t w = CVPixelBufferGetWidth(img);
+  const size_t h = CVPixelBufferGetHeight(img);
+  const size_t bpr = CVPixelBufferGetBytesPerRow(img);
+  const uint8_t* base = (const uint8_t*)CVPixelBufferGetBaseAddress(img);
+  NSMutableData* d = [NSMutableData dataWithLength:w * h * 4];
+  uint8_t* dst = (uint8_t*)d.mutableBytes;
+  for (size_t y = 0; y < h; y++) {
+    memcpy(dst + y * w * 4, base + y * bpr, w * 4);
+  }
+  CVPixelBufferUnlockBaseAddress(img, kCVPixelBufferLock_ReadOnly);
+  [self.lock lock];
+  self.latest = d;
+  self.width = (int32_t)w;
+  self.height = (int32_t)h;
+  self.frameCount++;
+  [self.lock unlock];
+}
 @end
 
 static inline CPAppleContext* CTX(camera_context_t* c) {
@@ -474,11 +521,56 @@ camera_error_t camera_hal_set_audio_gain(camera_context_t* ctx, float gain) {
   (void)ctx; (void)gain; return CAMERA_ERROR_FEATURE_NOT_SUPPORTED;
 }
 camera_error_t camera_hal_start_image_stream(camera_context_t* ctx, int32_t w, int32_t h, int32_t fps, camera_frame_callback_t cb, void* ud) {
-  (void)ctx; (void)w; (void)h; (void)fps; (void)cb; (void)ud;
-  return CAMERA_ERROR_FEATURE_NOT_SUPPORTED;
+  (void)w; (void)h; (void)fps; (void)cb; (void)ud;
+  if (!ctx) return CAMERA_ERROR_NOT_INITIALIZED;
+  CPAppleContext* c = CTX(ctx);
+  if (!c.session || !c.device) return CAMERA_ERROR_NOT_INITIALIZED;
+
+  CPFrameDelegate* del = [CPFrameDelegate new];
+  c.frameDelegate = del;
+  c.frameQueue = dispatch_queue_create("camera_pro.frames", DISPATCH_QUEUE_SERIAL);
+
+  AVCaptureVideoDataOutput* out = [[AVCaptureVideoDataOutput alloc] init];
+  out.videoSettings = @{
+    (id)kCVPixelBufferPixelFormatTypeKey : @(kCVPixelFormatType_32BGRA)
+  };
+  out.alwaysDiscardsLateVideoFrames = YES;
+  [out setSampleBufferDelegate:del queue:c.frameQueue];
+  if ([c.session canAddOutput:out]) [c.session addOutput:out];
+  c.dataOutput = out;
+
+  // Keep preview frames small for cheap FFI polling.
+  if ([c.session canSetSessionPreset:AVCaptureSessionPreset640x480]) {
+    c.session.sessionPreset = AVCaptureSessionPreset640x480;
+  }
+
+  // Request camera authorization (shows the system prompt on first use), then
+  // start the session once granted.
+  __weak CPAppleContext* weakCtx = c;
+  [AVCaptureDevice requestAccessForMediaType:AVMediaTypeVideo
+                           completionHandler:^(BOOL granted) {
+    CPAppleContext* strongCtx = weakCtx;
+    if (!strongCtx) return;
+    if (granted) {
+      [strongCtx.session startRunning];
+    } else if (strongCtx.errorCb) {
+      strongCtx.errorCb(strongCtx.errorUd, CAMERA_ERROR_PERMISSION_DENIED,
+                        "Camera permission denied");
+    }
+  }];
+
+  set_state(c, CAMERA_STATE_PREVIEWING);
+  return CAMERA_OK;
 }
+
 camera_error_t camera_hal_stop_image_stream(camera_context_t* ctx) {
-  (void)ctx; return CAMERA_ERROR_FEATURE_NOT_SUPPORTED;
+  if (!ctx) return CAMERA_ERROR_NOT_INITIALIZED;
+  CPAppleContext* c = CTX(ctx);
+  [c.session stopRunning];
+  if (c.dataOutput) [c.session removeOutput:c.dataOutput];
+  c.dataOutput = nil;
+  c.frameDelegate = nil;
+  return CAMERA_OK;
 }
 
 camera_error_t camera_hal_set_error_callback(camera_context_t* ctx, camera_error_callback_t cb, void* ud) {
@@ -532,4 +624,31 @@ int32_t camera_pro_apple_platform_name(camera_context_t* ctx, char* out, int32_t
 int32_t camera_pro_apple_active_device_name(camera_context_t* ctx, char* out, int32_t cap) {
   if (!ctx) return 0;
   return copy_utf8(CTX(ctx).deviceName, out, cap);
+}
+
+int64_t camera_pro_apple_frame_count(camera_context_t* ctx) {
+  if (!ctx) return 0;
+  CPFrameDelegate* d = CTX(ctx).frameDelegate;
+  return d ? d.frameCount : 0;
+}
+
+int32_t camera_pro_apple_copy_latest_frame(camera_context_t* ctx, uint8_t* out,
+                                           int32_t cap, int32_t* width,
+                                           int32_t* height) {
+  if (!ctx || !out) return 0;
+  CPFrameDelegate* d = CTX(ctx).frameDelegate;
+  if (!d) return 0;
+  int32_t bytes = 0;
+  [d.lock lock];
+  if (d.latest && d.width > 0 && d.height > 0) {
+    const int32_t need = (int32_t)d.latest.length;
+    if (need <= cap) {
+      memcpy(out, d.latest.bytes, (size_t)need);
+      if (width) *width = d.width;
+      if (height) *height = d.height;
+      bytes = need;
+    }
+  }
+  [d.lock unlock];
+  return bytes;
 }

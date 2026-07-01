@@ -125,6 +125,48 @@ external int camera_hal_set_torch(
   double intensity,
 );
 
+// ── Live preview image stream ───────────────────────────────────────────────
+
+@ffi.Native<
+    ffi.Int32 Function(
+      ffi.Pointer<CameraHalContext>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Pointer<ffi.Void>,
+      ffi.Pointer<ffi.Void>,
+    )>()
+external int camera_hal_start_image_stream(
+  ffi.Pointer<CameraHalContext> ctx,
+  int width,
+  int height,
+  int fps,
+  ffi.Pointer<ffi.Void> callback,
+  ffi.Pointer<ffi.Void> userData,
+);
+
+@ffi.Native<ffi.Int32 Function(ffi.Pointer<CameraHalContext>)>()
+external int camera_hal_stop_image_stream(ffi.Pointer<CameraHalContext> ctx);
+
+@ffi.Native<ffi.Int64 Function(ffi.Pointer<CameraHalContext>)>()
+external int camera_pro_apple_frame_count(ffi.Pointer<CameraHalContext> ctx);
+
+@ffi.Native<
+    ffi.Int32 Function(
+      ffi.Pointer<CameraHalContext>,
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Int32,
+      ffi.Pointer<ffi.Int32>,
+      ffi.Pointer<ffi.Int32>,
+    )>()
+external int camera_pro_apple_copy_latest_frame(
+  ffi.Pointer<CameraHalContext> ctx,
+  ffi.Pointer<ffi.Uint8> out,
+  int cap,
+  ffi.Pointer<ffi.Int32> width,
+  ffi.Pointer<ffi.Int32> height,
+);
+
 // ── Apple flat accessors ────────────────────────────────────────────────────
 
 @ffi.Native<ffi.Int32 Function(ffi.Pointer<CameraHalContext>)>()

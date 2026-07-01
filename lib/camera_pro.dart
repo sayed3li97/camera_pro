@@ -9,7 +9,7 @@ library;
 export 'src/camera_pro_base.dart' show CameraPro;
 // Controller & lifecycle
 export 'src/controller/camera_backend.dart'
-    show CameraBackend, StubCameraBackend;
+    show CameraBackend, PreviewFrame, StubCameraBackend;
 export 'src/controller/camera_pro_controller.dart'
     show CameraProController, CameraSettings;
 export 'src/controller/camera_state_machine.dart' show CameraStateMachine;

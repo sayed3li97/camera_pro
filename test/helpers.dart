@@ -135,6 +135,18 @@ class RecordingBackend implements CameraBackend {
   Future<void> stopPreview() async => calls.add('stopPreview');
 
   @override
+  Future<void> startFrameStream() async => calls.add('startFrameStream');
+
+  @override
+  Future<void> stopFrameStream() async => calls.add('stopFrameStream');
+
+  @override
+  PreviewFrame? latestFrame() => null;
+
+  @override
+  int get frameCount => 0;
+
+  @override
   Future<void> setExposureMode(ExposureMode mode) async =>
       calls.add('exposureMode:$mode');
 

@@ -7,10 +7,34 @@
 /// device.
 library;
 
+import 'dart:typed_data';
+
 import '../models/camera_device.dart';
 import '../models/capabilities.dart';
 import '../models/capture_result.dart';
 import '../models/settings.dart';
+
+/// A single decoded preview frame delivered from the native camera stream.
+class PreviewFrame {
+  const PreviewFrame({
+    required this.bytes,
+    required this.width,
+    required this.height,
+    this.isBgra = true,
+  });
+
+  /// Tightly-packed pixel bytes (BGRA8888 when [isBgra], else RGBA8888).
+  final Uint8List bytes;
+
+  /// Frame width in pixels.
+  final int width;
+
+  /// Frame height in pixels.
+  final int height;
+
+  /// Whether [bytes] are BGRA (true) or RGBA (false).
+  final bool isBgra;
+}
 
 /// Contract every platform backend implements.
 abstract interface class CameraBackend {
@@ -29,6 +53,19 @@ abstract interface class CameraBackend {
 
   /// Stops the preview stream.
   Future<void> stopPreview();
+
+  /// Starts delivering live preview frames (requests camera permission).
+  /// Backends without a frame path may leave this a no-op.
+  Future<void> startFrameStream();
+
+  /// Stops delivering live preview frames.
+  Future<void> stopFrameStream();
+
+  /// Returns the most recent preview frame, or null if none is available yet.
+  PreviewFrame? latestFrame();
+
+  /// Number of preview frames delivered so far (for readiness/FPS checks).
+  int get frameCount;
 
   // ── Manual controls (throw CameraProError on failure) ──
   Future<void> setExposureMode(ExposureMode mode);
@@ -74,6 +111,18 @@ class StubCameraBackend implements CameraBackend {
 
   @override
   Future<void> stopPreview() async {}
+
+  @override
+  Future<void> startFrameStream() async {}
+
+  @override
+  Future<void> stopFrameStream() async {}
+
+  @override
+  PreviewFrame? latestFrame() => null;
+
+  @override
+  int get frameCount => 0;
 
   Never _unsupported(String feature) => throw StateError('$feature: stub backend');
 

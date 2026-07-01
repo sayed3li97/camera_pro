@@ -67,6 +67,15 @@ CAMERA_PRO_EXPORT int32_t camera_pro_apple_platform_name(
 CAMERA_PRO_EXPORT int32_t camera_pro_apple_active_device_name(
     camera_context_t* ctx, char* out, int32_t cap);
 
+/* Number of preview frames delivered so far (0 until permission is granted). */
+CAMERA_PRO_EXPORT int64_t camera_pro_apple_frame_count(camera_context_t* ctx);
+
+/* Copies the latest preview frame as tightly-packed BGRA into `out` (bounded by
+ * cap). Writes width/height. Returns bytes copied, or 0 if none / too small. */
+CAMERA_PRO_EXPORT int32_t camera_pro_apple_copy_latest_frame(
+    camera_context_t* ctx, uint8_t* out, int32_t cap,
+    int32_t* width, int32_t* height);
+
 #ifdef __cplusplus
 }
 #endif
