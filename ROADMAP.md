@@ -109,8 +109,8 @@ Depends on Phase 2 or 3 completing at least one platform backend.
 | Burst capture | ❌ |
 | Bracket / HDR capture | ❌ |
 | Histogram live feed from camera frames | ✅ Native C compute per frame; live overlay in the example |
-| Focus peaking overlay | 🚧 C compute ready; live overlay not wired |
-| Zebra overexposure overlay | 🚧 C compute ready; texture compositing not wired |
+| Focus peaking overlay | ✅ Sobel C kernel per frame; toggleable cyan overlay (channel-order aware) |
+| Zebra overexposure overlay | ✅ C kernel per frame; toggleable overlay |
 | Auto-generated FFI bindings (replace hand-written) | 🚧 `ffigen.yaml` present; run blocked on stable codegen |
 
 ---

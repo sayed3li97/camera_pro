@@ -44,6 +44,8 @@ class _CapabilityPageState extends State<CapabilityPage> {
   int _frames = 0;
   HistogramData? _hist;
   String? _savedPath;
+  bool _focusPeaking = false;
+  bool _zebra = false;
 
   // Live manual-control state.
   double _iso = 100;
@@ -111,9 +113,28 @@ class _CapabilityPageState extends State<CapabilityPage> {
       }
     }
 
+    // Apply the selected visual-aid overlay in the native C core.
+    var pixels = frame.bytes;
+    if (_focusPeaking) {
+      pixels = NativeCore.focusPeaking(
+        frame.bytes,
+        width: frame.width,
+        height: frame.height,
+        isBgra: frame.isBgra,
+        threshold: 0.1,
+        peakColor: 0x00FFFFFF, // cyan (classic focus-peaking colour)
+      );
+    } else if (_zebra) {
+      pixels = NativeCore.zebra(frame.bytes,
+          width: frame.width,
+          height: frame.height,
+          isBgra: frame.isBgra,
+          frameCounter: _frames);
+    }
+
     _decoding = true;
     ui.decodeImageFromPixels(
-      frame.bytes,
+      pixels,
       frame.width,
       frame.height,
       frame.isBgra ? ui.PixelFormat.bgra8888 : ui.PixelFormat.rgba8888,
@@ -177,6 +198,30 @@ class _CapabilityPageState extends State<CapabilityPage> {
               padding: const EdgeInsets.all(16),
               children: <Widget>[
                 _PreviewArea(image: _preview, frames: _frames, hist: _hist),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: <Widget>[
+                    FilterChip(
+                      label: const Text('Focus peaking'),
+                      avatar: const Icon(Icons.filter_center_focus, size: 16),
+                      selected: _focusPeaking,
+                      onSelected: (v) => setState(() {
+                        _focusPeaking = v;
+                        if (v) _zebra = false;
+                      }),
+                    ),
+                    FilterChip(
+                      label: const Text('Zebra'),
+                      avatar: const Icon(Icons.gradient, size: 16),
+                      selected: _zebra,
+                      onSelected: (v) => setState(() {
+                        _zebra = v;
+                        if (v) _focusPeaking = false;
+                      }),
+                    ),
+                  ],
+                ),
                 if (_savedPath != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),

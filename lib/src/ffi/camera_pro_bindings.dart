@@ -111,6 +111,7 @@ external void camera_pro_compute_histogram_rgba(
       ffi.Int32,
       ffi.Int32,
       ffi.Int32,
+      ffi.Int32,
       ffi.Float,
       ffi.Uint32,
     )>()
@@ -120,6 +121,7 @@ external int camera_pro_compute_focus_peaking(
   int width,
   int height,
   int stride,
+  int isBgra,
   double threshold,
   int peakColor,
 );
@@ -128,6 +130,7 @@ external int camera_pro_compute_focus_peaking(
     ffi.Int32 Function(
       ffi.Pointer<ffi.Uint8>,
       ffi.Pointer<ffi.Uint8>,
+      ffi.Int32,
       ffi.Int32,
       ffi.Int32,
       ffi.Int32,
@@ -140,6 +143,7 @@ external int camera_pro_compute_zebra(
   int width,
   int height,
   int stride,
+  int isBgra,
   double threshold,
   int frameCounter,
 );

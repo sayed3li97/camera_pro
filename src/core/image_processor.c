@@ -150,7 +150,7 @@ void camera_pro_compute_histogram_rgba(
 int32_t camera_pro_compute_focus_peaking(
     const uint8_t* rgba, uint8_t* out_rgba,
     int32_t width, int32_t height, int32_t stride,
-    float threshold, uint32_t peak_color) {
+    int32_t is_bgra, float threshold, uint32_t peak_color) {
 
     if (!rgba || !out_rgba || width <= 0 || height <= 0)
         return CAMERA_ERROR_INVALID_PARAMETER;
@@ -159,6 +159,8 @@ int32_t camera_pro_compute_focus_peaking(
     const uint8_t pr = (uint8_t)((peak_color >> 24) & 0xFF);
     const uint8_t pg = (uint8_t)((peak_color >> 16) & 0xFF);
     const uint8_t pb = (uint8_t)((peak_color >> 8) & 0xFF);
+    const int ri = is_bgra ? 2 : 0;  /* red channel index   */
+    const int bi = is_bgra ? 0 : 2;  /* blue channel index  */
 
     /* Sobel magnitude is at most ~4*255 in each direction; normalise by 1020. */
     const float norm = 1.0f / 1020.0f;
@@ -191,9 +193,9 @@ int32_t camera_pro_compute_focus_peaking(
             float edge = sqrtf((float)(gx * gx + gy * gy)) * norm;
 
             if (edge > threshold) {
-                orow[x * 4 + 0] = pr;
-                orow[x * 4 + 1] = pg;
-                orow[x * 4 + 2] = pb;
+                orow[x * 4 + ri] = pr;
+                orow[x * 4 + 1]  = pg;
+                orow[x * 4 + bi] = pb;
             }
         }
     }
@@ -395,7 +397,7 @@ int32_t camera_pro_compute_false_color(
 int32_t camera_pro_compute_zebra(
     const uint8_t* rgba, uint8_t* out_rgba,
     int32_t width, int32_t height, int32_t stride,
-    float threshold, int32_t frame_counter) {
+    int32_t is_bgra, float threshold, int32_t frame_counter) {
 
     if (!rgba || !out_rgba || width <= 0 || height <= 0)
         return CAMERA_ERROR_INVALID_PARAMETER;
@@ -403,24 +405,30 @@ int32_t camera_pro_compute_zebra(
 
     const int32_t thr = (int32_t)(threshold * 255.0f);
     const int32_t out_stride = width * 4;
+    const int ri = is_bgra ? 2 : 0;
+    const int bi = is_bgra ? 0 : 2;
 
     for (int32_t y = 0; y < height; y++) {
         const uint8_t* row = rgba + (size_t)y * stride;
         uint8_t* orow = out_rgba + (size_t)y * out_stride;
         for (int32_t x = 0; x < width; x++) {
-            uint8_t r = row[x * 4 + 0];
-            uint8_t g = row[x * 4 + 1];
-            uint8_t b = row[x * 4 + 2];
-            uint8_t a = row[x * 4 + 3];
+            const uint8_t c0 = row[x * 4 + 0];
+            const uint8_t c1 = row[x * 4 + 1];
+            const uint8_t c2 = row[x * 4 + 2];
+            orow[x * 4 + 0] = c0;
+            orow[x * 4 + 1] = c1;
+            orow[x * 4 + 2] = c2;
+            orow[x * 4 + 3] = row[x * 4 + 3];
 
-            if (luma_u8(r, g, b) > thr) {
-                int stripe = (((x + y + frame_counter * 2) / 4) & 1);
-                if (stripe == 0) { r = 255; g = 0; b = 0; }
+            const uint8_t luma = luma_u8(row[x * 4 + ri], c1, row[x * 4 + bi]);
+            if (luma > thr) {
+                const int stripe = (((x + y + frame_counter * 2) / 4) & 1);
+                if (stripe == 0) {          /* red stripe, channel-order aware */
+                    orow[x * 4 + ri] = 255;
+                    orow[x * 4 + 1]  = 0;
+                    orow[x * 4 + bi] = 0;
+                }
             }
-            orow[x * 4 + 0] = r;
-            orow[x * 4 + 1] = g;
-            orow[x * 4 + 2] = b;
-            orow[x * 4 + 3] = a;
         }
     }
     return CAMERA_OK;

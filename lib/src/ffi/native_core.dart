@@ -120,6 +120,59 @@ class NativeCore {
       pkg_ffi.malloc.free(out);
     }
   }
+
+  /// Returns a copy of [pixels] with Sobel-edge focus peaking applied.
+  /// [peakColor] is 0xRRGGBBAA. Set [isBgra] for BGRA-ordered input.
+  static Uint8List focusPeaking(
+    Uint8List pixels, {
+    required int width,
+    required int height,
+    bool isBgra = true,
+    double threshold = 0.15,
+    int peakColor = 0xFFFFFFFF,
+    int stride = 0,
+  }) {
+    final effectiveStride = stride == 0 ? width * 4 : stride;
+    final src = pkg_ffi.malloc<ffi.Uint8>(pixels.length);
+    final out = pkg_ffi.malloc<ffi.Uint8>(width * height * 4);
+    try {
+      src.asTypedList(pixels.length).setAll(0, pixels);
+      bindings.camera_pro_compute_focus_peaking(
+        src, out, width, height, effectiveStride, isBgra ? 1 : 0, threshold,
+        peakColor,
+      );
+      return Uint8List.fromList(out.asTypedList(width * height * 4));
+    } finally {
+      pkg_ffi.malloc.free(src);
+      pkg_ffi.malloc.free(out);
+    }
+  }
+
+  /// Returns a copy of [pixels] with zebra over-exposure stripes applied.
+  static Uint8List zebra(
+    Uint8List pixels, {
+    required int width,
+    required int height,
+    bool isBgra = true,
+    double threshold = 0.9,
+    int frameCounter = 0,
+    int stride = 0,
+  }) {
+    final effectiveStride = stride == 0 ? width * 4 : stride;
+    final src = pkg_ffi.malloc<ffi.Uint8>(pixels.length);
+    final out = pkg_ffi.malloc<ffi.Uint8>(width * height * 4);
+    try {
+      src.asTypedList(pixels.length).setAll(0, pixels);
+      bindings.camera_pro_compute_zebra(
+        src, out, width, height, effectiveStride, isBgra ? 1 : 0, threshold,
+        frameCounter,
+      );
+      return Uint8List.fromList(out.asTypedList(width * height * 4));
+    } finally {
+      pkg_ffi.malloc.free(src);
+      pkg_ffi.malloc.free(out);
+    }
+  }
 }
 
 /// A managed handle to a native ring buffer pool.

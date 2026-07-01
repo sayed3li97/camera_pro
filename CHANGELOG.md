@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Live focus-peaking + zebra overlays**
+
+- `camera_pro_compute_focus_peaking` and `camera_pro_compute_zebra` gained an `is_bgra` parameter so the overlay colours are correct on BGRA preview frames, exposed via `NativeCore.focusPeaking` / `NativeCore.zebra`.
+- The example has toggle chips that run the Sobel focus-peaking (cyan edge highlight) and zebra (over-exposure stripes) kernels on each preview frame. Verified live: focus peaking outlines in-focus edges in cyan on the running camera feed. (C harness 54 checks; 2 new FFI tests → 65 Dart tests.)
+
 **Photo capture + live histogram**
 
 - `capturePhoto()` is wired on the Apple backend: it grabs the latest preview frame (with digital manual-control adjustments applied), encodes a PNG via `dart:ui`, and writes it to disk, returning a `CapturedPhoto` with path + bytes. Verified on macOS — the example's Capture button saves a real 1920×1080 PNG. Full-res `AVCapturePhotoOutput`/RAW remains roadmap. New `ImageFormat.png` and `CaptureFailureReason.noFrame`.

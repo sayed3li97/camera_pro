@@ -93,6 +93,7 @@ camera_pro_compute_focus_peaking(
     int32_t        width,
     int32_t        height,
     int32_t        stride,
+    int32_t        is_bgra,       /* 1 = B,G,R,A channel order; 0 = R,G,B,A */
     float          threshold,     /* 0..1 edge magnitude threshold */
     uint32_t       peak_color);   /* 0xRRGGBBAA */
 
@@ -107,6 +108,7 @@ camera_pro_compute_zebra(
     int32_t        width,
     int32_t        height,
     int32_t        stride,
+    int32_t        is_bgra,       /* 1 = B,G,R,A channel order; 0 = R,G,B,A */
     float          threshold,
     int32_t        frame_counter);
 

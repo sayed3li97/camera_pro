@@ -147,7 +147,7 @@ static void test_visual_aids(void) {
             p[0] = p[1] = p[2] = val; p[3] = 255;
         }
     }
-    int32_t rc = camera_pro_compute_focus_peaking(in, out, W, H, stride, 0.2f, 0x00FFFFFFu);
+    int32_t rc = camera_pro_compute_focus_peaking(in, out, W, H, stride, 0, 0.2f, 0x00FFFFFFu);
     CHECK(rc == CAMERA_OK, "focus peaking returns OK");
     /* Column at the edge (x = W/2 - 1 or W/2) should be tinted cyan-ish (G/B high, differs from pure b/w). */
     int found_edge = 0;
@@ -159,7 +159,7 @@ static void test_visual_aids(void) {
 
     /* Zebra: fully white image over threshold must gain some red-striped pixels. */
     for (int32_t i = 0; i < stride * H; i++) in[i] = 255;
-    rc = camera_pro_compute_zebra(in, out, W, H, stride, 0.9f, 0);
+    rc = camera_pro_compute_zebra(in, out, W, H, stride, 0, 0.9f, 0);
     CHECK(rc == CAMERA_OK, "zebra returns OK");
     int striped = 0;
     for (int32_t i = 0; i < W * H; i++) {

@@ -88,6 +88,48 @@ void main() {
       expect([white[0], white[1], white[2]], [0xFF, 0x00, 0x00]); // clip => red
     });
 
+    test('focus peaking highlights a sharp edge', () {
+      const w = 16, h = 16;
+      final rgba = Uint8List(w * h * 4);
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          final v = x >= w ~/ 2 ? 255 : 0;
+          final i = (y * w + x) * 4;
+          rgba[i] = v;
+          rgba[i + 1] = v;
+          rgba[i + 2] = v;
+          rgba[i + 3] = 255;
+        }
+      }
+      final out = NativeCore.focusPeaking(rgba,
+          width: w, height: h, isBgra: false, threshold: 0.2);
+      // The vertical edge column should be tinted white (0xFF,0xFF,0xFF).
+      var found = false;
+      for (var y = 1; y < h - 1; y++) {
+        final i = (y * w + w ~/ 2) * 4;
+        if (out[i] == 0xFF && out[i + 1] == 0xFF && out[i + 2] == 0xFF) {
+          found = true;
+        }
+      }
+      expect(found, isTrue);
+    });
+
+    test('zebra stripes over-exposure on a bright image', () {
+      const w = 16, h = 16;
+      final rgba = Uint8List.fromList(
+          List<int>.generate(w * h * 4, (i) => i % 4 == 3 ? 255 : 255));
+      final out = NativeCore.zebra(rgba,
+          width: w, height: h, isBgra: false, threshold: 0.9);
+      // Some pixels become red (255,0,0) stripes.
+      var striped = false;
+      for (var i = 0; i < w * h; i++) {
+        if (out[i * 4] == 255 && out[i * 4 + 1] == 0 && out[i * 4 + 2] == 0) {
+          striped = true;
+        }
+      }
+      expect(striped, isTrue);
+    });
+
     test('buffer pool acquires, drains, and releases', () {
       final pool = NativeBufferPool.create(bufferSize: 1024, count: 2);
       expect(pool, isNotNull);
