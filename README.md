@@ -4,9 +4,9 @@ A Flutter camera package built on a shared C/C++ core with a crash-proof Dart AP
 
 ---
 
-> **Project status: early foundation (v0.1.0)**
+> **Project status: working camera engine (v0.1.0, pre-release)**
 >
-> The architectural skeleton is complete and verified. The C core (SIMD processing, lock-free buffer pool, format conversion, focus peaking, zebra), the Dart control-plane (capability passport, typed state machine, typed errors, FFI wiring), and the stub HAL backend all pass their full test suites. Real platform camera access (Android, iOS, macOS, Windows, Linux, Web) is **not yet wired** — you get a conformant stub backend until native HAL implementations land. This README is explicit about what is ✅ done vs 🚧 designed-but-not-yet-native-wired vs ❌ not started.
+> On macOS the example app opens the real camera and does live preview, all six manual controls, five live visual-aid overlays (histogram, focus peaking, zebra, false color, waveform — GPU-accelerated via Metal where available), PNG + RAW/DNG capture with EXIF, burst, EV bracketing, and H.264 video recording — every one of those verified live against real hardware. The same AVFoundation backend compiles for iOS with sensor-level manual controls. Linux (V4L2) and Windows (Media Foundation) backends implement the full HAL contract and pass CI on real ubuntu/windows runners (camera-hardware runtime pending machines with cameras). Android and Web are not started — see [ROADMAP.md](ROADMAP.md) for the honest gate on every remaining item.
 
 ---
 
@@ -32,21 +32,21 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | Feature | Status | Notes |
 |---|---|---|
 | Shared C core (camera_pro_core.h) | ✅ | Compiles on macOS arm64, Windows, Linux via native-assets |
-| Lock-free buffer pool (C) | ✅ | 36/36 C tests pass |
-| NEON SIMD histogram kernel | ✅ | Bit-exact vs scalar reference, cross-checked on arm64 |
+| Lock-free buffer pool (C) | ✅ | 60-check C harness (also MSVC-compatible aligned alloc) |
+| SIMD histogram kernels (NEON + SSSE3) | ✅ | Bit-exact vs scalar; x86 path verified under Rosetta and on CI |
 | Scalar fallback histogram | ✅ | Active when NEON unavailable |
-| YUV→RGBA format conversion (YUV420p, NV12, NV21) | ✅ | Scalar; SIMD path is 🚧 |
+| YUV→RGBA format conversion (YUV420p, NV12, NV21) | ✅ | NEON fast path for 420P (bit-exact, 0.66ms/1080p); scalar elsewhere |
 | native-assets FFI build hook | ✅ | hook/build.dart, verified end-to-end |
 | Dart capability passport | ✅ | `Capability<T>`, `Supported<T>`, `NotSupported<T>` |
 | Dart typed error hierarchy | ✅ | Sealed `CameraProError` + `CameraErrorRecovery` |
 | Dart state machine | ✅ | `CameraState` + `stateChanges` stream |
 | Tier selection (`determineTier`) | ✅ | Derived from capabilities |
 | Conformant stub HAL backend | ✅ | All HAL contract methods implemented as no-ops |
-| Android NDK Camera2 HAL | 🚧 | HAL contract defined; native side not wired |
-| Apple AVFoundation HAL (iOS/macOS) | ✅* | Control-plane done & verified: enumeration, capabilities, manual controls. Preview/capture 🚧 |
-| Windows Media Foundation HAL | 🚧 | HAL contract defined; native side not wired |
-| Linux V4L2 HAL | 🚧 | HAL contract defined; native side not wired |
-| Web (getUserMedia) HAL | 🚧 | HAL contract defined; native side not wired |
+| Android NDK Camera2 HAL | ❌ | Gated on Android hardware for honest verification |
+| Apple AVFoundation HAL (iOS/macOS) | ✅ | Enumeration, capabilities, manual controls, live preview, photo/RAW capture, video recording |
+| Windows Media Foundation HAL | ✅ CI | Full 44-fn contract; compiles + lifecycle harness runs on windows-latest |
+| Linux V4L2 HAL | ✅ CI | Full contract incl. mmap streaming; compiles + runs on ubuntu-latest |
+| Web (getUserMedia) HAL | ❌ | Needs conditional-import refactor (plan in ROADMAP.md) |
 | Flutter texture registration | 🚧 | API surface designed; not connected |
 
 ### Manual controls
@@ -78,7 +78,7 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | Live waveform monitor (camera frames) | ✅ | C kernel per frame; toggleable graph overlay |
 | Luminance waveform monitor (C core) | ✅ | `camera_pro_compute_luma_waveform` → `WaveformData` |
 | False-color exposure map (C core) | ✅ | `camera_pro_compute_false_color` |
-| GPU compute focus peaking (Metal/Vulkan/D3D11/WebGPU) | 🚧 | Architecture planned; shaders not written |
+| GPU compute (Metal): histogram/peaking/zebra | ✅ | Runtime-compiled MSL, bit-exact vs CPU on M1 Pro; auto GPU/CPU dispatch. Vulkan/D3D11/WebGPU ⛔ platform-gated |
 | Live camera preview (macOS/iOS) | ✅ | AVFoundation frames → FFI → `dart:ui` (no TextureRegistry needed); verified streaming on real hardware |
 
 ### Capture
@@ -88,18 +88,18 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | `capturePhoto()` API surface | ✅ | Method exists, capability-guarded, typed error on failure |
 | Photo capture to disk (macOS/iOS) | ✅ | Frame grab → PNG on disk (with manual adjustments applied); verified saving a 1920×1080 PNG |
 | Full-res JPEG/HEIF capture (`AVCapturePhotoOutput`) | 🚧 | Frame-grab capture works today; full-res output is roadmap |
-| RAW/DNG capture | 🚧 | API modelled (`ImageFormat.raw`); libtiff/libexif not integrated |
-| EXIF embedding | 🚧 | Not started |
-| libjpeg-turbo integration | 🚧 | Not integrated |
-| Burst / bracket / HDR | ❌ | Not started |
+| RAW/DNG capture | ✅ | Dependency-free linear-DNG writer with EXIF; ffmpeg-verified from the real camera |
+| EXIF embedding | ✅ | ISO, exposure time, timestamps in the DNG's EXIF IFD |
+| libjpeg-turbo integration | — | Skipped by design (PNG via dart:ui + DNG cover stills) |
+| Burst / EV bracket | ✅ | Verified: 5-shot burst ~1.2s; bracket YAVG 25.8/96.9/183.4. HDR fusion ❌ |
 
 ### Video
 
 | Feature | Status | Notes |
 |---|---|---|
-| Video recording API | ❌ | Not started |
-| Live streaming | ❌ | Not started |
-| Frame processors | 🚧 | Architecture planned |
+| Video recording | ✅ | AVCaptureMovieFileOutput → .mov (h264), ffprobe-verified |
+| Live streaming | 🚧 | API modelled (StreamConfig/StreamStatus); transport is roadmap |
+| Frame processors | ✅ | FrameProcessor plugin API on the preview path, tested |
 | `VideoResolution` / `Bitrate` value types | ✅ | Defined in Dart |
 | `VideoCodec` / `StreamProtocol` enums | ✅ | Defined in Dart |
 
@@ -109,8 +109,8 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 |---|---|---|
 | Sealed typed error hierarchy | ✅ | 9 error subclasses, each with `CameraErrorRecovery` |
 | Thermal throttle signalling | ✅ | `ThermalLevel` / `ThermalPolicy` in Dart |
-| Device quirks registry | ✅ | `DeviceQuirk` / `quirksFor()` scaffolded |
-| Multi-camera support | 🚧 | API designed; not wired |
+| Device quirks registry | ✅ | 8 community-sourced entries |
+| Multi-camera support | ✅ | Concurrent two-device open verified on real cameras |
 | Depth / LiDAR | 🚧 | Not started |
 
 ---
@@ -122,8 +122,8 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | Android | 🚧 | ✅ | NDK Camera2 HAL designed, not wired |
 | iOS | ✅ controls + preview | ✅ | AVFoundation HAL: enumeration, capabilities, manual controls, live preview (compiled vs iOS SDK) |
 | macOS | ✅ preview + manual | ✅ | Live preview streaming on real cameras; full manual control set (ISO/shutter/exposure/WB/focus/zoom) via the digital pipeline since the built-in camera exposes no sensor controls → `CameraTier.full` |
-| Windows | 🚧 | ✅ | Media Foundation HAL designed, not wired |
-| Linux | 🚧 | ✅ | V4L2 HAL designed, not wired |
+| Windows | ✅ CI | ✅ | Media Foundation backend (full 44-fn contract) compiles + lifecycle harness runs on CI; camera runtime ⛔ needs hardware |
+| Linux | ✅ CI | ✅ | V4L2 backend (full contract, mmap streaming) compiles + lifecycle harness runs on CI; camera runtime ⛔ needs hardware |
 | Web | 🚧 | ✅ (scalar only) | getUserMedia HAL designed; SIMD requires WASM target |
 
 All platforms get the C core and stub backend today. Platform camera access requires the corresponding HAL implementation.
@@ -210,17 +210,41 @@ The following results were produced on macOS arm64 with Flutter 3.44.1 / Dart 3.
 
 | Test suite | Result |
 |---|---|
-| C core (`clang -std=c11 -O2 -Wall -Wextra -Werror`) | **54/54 checks pass** |
-| NEON histogram cross-check vs scalar reference | Bit-exact on arm64 |
-| Dart unit + FFI tests (`flutter test`) | **65/65 pass** (54 pure-logic, 11 real FFI through compiled core) |
-| `flutter analyze` (package) | **No issues** |
-| `flutter analyze` (example app) | **No issues** |
-| Example app widget test | **Pass** |
-| native-assets end-to-end (hook/build.dart → libcamera_pro_core.dylib → FFI) | **Verified** |
-| AVFoundation HAL harness on real Mac cameras | **Pass** (enumerated FaceTime HD + external) |
-| `AppleCameraBackend` via Dart FFI (`flutter test`, macOS) | **Pass** |
-| Apple HAL iOS branch (iPhoneOS SDK compile) | **Compiles** |
-| Live camera preview (example app, real Mac camera) | **Streaming** (frames flowing continuously into the Flutter UI) |
+| C core (`clang -std=c11 -O2 -Wall -Wextra -Werror`) | **60/60 checks pass** (arm64 NEON) |
+| Same harness compiled x86_64, run under **Rosetta 2** | **60/60** — SSSE3 histogram bit-exact vs scalar |
+| Dart unit + FFI tests (`flutter test`) | **71/71 pass** |
+| `flutter analyze` (package + example) | **No issues** |
+| GitHub Actions CI (`native.yml`) | **Green**: macos-14, ubuntu (gcc `-Werror` V4L2 + `-mssse3` core), windows (MSVC /W4 Media Foundation) — backends compile and the lifecycle harness runs on all three |
+| Metal GPU cross-check (`metal_test.c`, Apple M1 Pro) | Histogram + zebra **bit-exact** vs C kernels; peaking within 0.005% |
+| Live camera preview (example app, real Mac camera) | **Streaming** |
+| Video recording (`.mov`) | **ffprobe-verified**: h264, 640×480, ~30fps, 34s, 14.7MB |
+| RAW capture (linear-DNG + EXIF from the real camera) | **ffmpeg-decodes** the 1920×1080 6.2MB DNG; pixel round-trip exact on synthetic data |
+| Burst capture | **5 PNGs in ~1.2s** from one click |
+| EV bracket (−2/0/+2) | **Measured** mean luminance 25.8 / 96.9 / 183.4 |
+| Multi-camera | Two backends opened **different physical cameras** concurrently |
+| dartdoc / `dart pub publish --dry-run` | **0 warnings** each |
+
+## Measured performance
+
+`src/tests/bench.c`, 1920×1080 RGBA, median of 31 runs, Apple M1 Pro, `-O2`:
+
+| Kernel | ms/frame | fps |
+|---|---:|---:|
+| YUV420P → RGBA (NEON) | 0.66 | 1510 |
+| Zebra | 2.0 | 502 |
+| Digital zoom 2× | 2.1 | 472 |
+| Histogram (scalar, auto-vectorized) | 2.3 | 437 |
+| Waveform (256 cols) | 2.6 | 380 |
+| Histogram (hand-written NEON) | 3.1 | 328 |
+| Digital adjust (gain+EV+WB) | 6.9 | 145 |
+| False color | 15.5 | 64 |
+| Box blur r=6 | 20.9 | 48 |
+| Focus peaking (Sobel, CPU) | 34.4 | 29 |
+
+Honest notes: clang's auto-vectorized scalar histogram *beats* the hand-written
+NEON version on M1 Pro (the scatter loop dominates) — both stay, both are
+bit-exact. CPU focus peaking is the one kernel below 60fps at 1080p; that is
+exactly why the GPU (Metal) path exists — the example uses it automatically.
 | macOS manual controls (all six) applied to the live feed | **Verified** — ISO/exposure/WB visibly transform the feed; example reaches `Tier: Full manual (DSLR)` |
 | macOS sensor-control availability (3-layer recon) | **Measured: none** — probed AVFoundation (0 controls), CoreMediaIO (`kCMIOExposureControlClassID` etc. exist but 0 control objects on-device), and IOKit/USB (0 UVC devices). Hence the digital pipeline. |
 

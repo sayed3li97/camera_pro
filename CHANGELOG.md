@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Roadmap completion sweep (pro capture, GPU, SIMD, platforms, polish)**
+
+- **Video recording**: `AVCaptureMovieFileOutput` wired through HAL → backend → controller (`startVideoRecording`/`stopVideoRecording`, blocking finalize). ffprobe-verified h264 `.mov`.
+- **Burst + EV bracketing**: `captureBurst(count)` and `captureExposureBracket(stops)` (EV restore, settle delay). Verified: 5 shots ≈1.2s; bracket mean-luminance 25.8/96.9/183.4 at −2/0/+2.
+- **RAW/DNG + EXIF**: dependency-free linear-DNG writer (`dng_writer.c`, DNG 1.4 + ColorMatrix1 + EXIF IFD); `ImageFormat.raw`/`rawPlusJpeg` wired; ffmpeg-verified from the real camera.
+- **Metal GPU compute**: runtime-compiled MSL histogram/peaking/zebra, bit-exact vs the C kernels on Apple M1 Pro; `MetalCompute` with automatic CPU fallback; example overlays run on GPU.
+- **SIMD**: SSSE3 x86 histogram (bit-exact, verified under Rosetta 2 and on CI x86); NEON YUV420P→RGBA (bit-exact, 0.66ms/1080p).
+- **Frame processors**: `FrameProcessor` plugin API on the preview path. **Multi-camera**: concurrent two-device open verified. **Quirks DB**: 8 entries. **Streaming**: typed API surface (transport roadmap).
+- **Linux V4L2 + Windows Media Foundation backends**: full 44-function HAL contract each; GitHub Actions CI (`native.yml`) compiles and runs the portable lifecycle harness on macos-14/ubuntu/windows every push — all green.
+- **Polish**: measured benchmark harness (`bench.c`) with README numbers; dartdoc 0 warnings; `pub publish --dry-run` 0 warnings.
+
 **Live false-color + waveform overlays (visual-aids suite complete)**
 
 - Added an `is_bgra` parameter to `camera_pro_compute_false_color` and `camera_pro_compute_luma_waveform` for correct colours/luma on BGRA preview frames.
