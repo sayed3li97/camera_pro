@@ -125,6 +125,18 @@ external int camera_hal_set_torch(
   double intensity,
 );
 
+// ── Video recording ─────────────────────────────────────────────────────────
+
+@ffi.Native<
+    ffi.Int32 Function(ffi.Pointer<CameraHalContext>, ffi.Pointer<ffi.Char>)>()
+external int camera_hal_start_recording(
+  ffi.Pointer<CameraHalContext> ctx,
+  ffi.Pointer<ffi.Char> path,
+);
+
+@ffi.Native<ffi.Int32 Function(ffi.Pointer<CameraHalContext>)>()
+external int camera_hal_stop_recording(ffi.Pointer<CameraHalContext> ctx);
+
 // ── Live preview image stream ───────────────────────────────────────────────
 
 @ffi.Native<

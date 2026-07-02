@@ -5,6 +5,7 @@
 // crash-proof typed-error handling. Falls back to a capabilities-only view when
 // no camera is available.
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:camera_pro/camera_pro.dart';
@@ -44,6 +45,7 @@ class _CapabilityPageState extends State<CapabilityPage> {
   int _frames = 0;
   HistogramData? _hist;
   String? _savedPath;
+  bool _recording = false;
   bool _focusPeaking = false;
   bool _zebra = false;
   bool _falseColor = false;
@@ -182,6 +184,58 @@ class _CapabilityPageState extends State<CapabilityPage> {
     }
   }
 
+  Future<void> _burst() async {
+    final controller = _controller;
+    if (controller == null) return;
+    try {
+      final photos = await controller.captureBurst(count: 5);
+      setState(() => _savedPath = photos.last.path);
+      _showSnack('Burst: ${photos.length} photos saved');
+    } on Object catch (e) {
+      setState(() => _error = '$e');
+    }
+  }
+
+  Future<void> _bracket() async {
+    final controller = _controller;
+    if (controller == null) return;
+    try {
+      final photos = await controller
+          .captureExposureBracket(stops: const <double>[-2, 0, 2]);
+      setState(() => _savedPath = photos.last.path);
+      _showSnack('Bracket: ${photos.length} photos at -2/0/+2 EV');
+    } on Object catch (e) {
+      setState(() => _error = '$e');
+    }
+  }
+
+  Future<void> _toggleRecording() async {
+    final controller = _controller;
+    if (controller == null) return;
+    setState(() => _error = null);
+    try {
+      if (_recording) {
+        final video = await controller.stopVideoRecording();
+        setState(() {
+          _recording = false;
+          _savedPath = video.path;
+        });
+        _showSnack('Recorded ${video.duration.inSeconds}s '
+            '(${video.fileSizeBytes ?? 0} bytes) → ${video.path}');
+      } else {
+        final ts = DateTime.now().millisecondsSinceEpoch;
+        final path = '${Directory.systemTemp.path}/camera_pro_$ts.mov';
+        await controller.startVideoRecording(path);
+        setState(() => _recording = true);
+      }
+    } on Object catch (e) {
+      setState(() {
+        _recording = false;
+        _error = '$e';
+      });
+    }
+  }
+
   void _showSnack(String message) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
@@ -202,10 +256,38 @@ class _CapabilityPageState extends State<CapabilityPage> {
       appBar: AppBar(title: const Text('camera_pro')),
       floatingActionButton: controller == null
           ? null
-          : FloatingActionButton.extended(
-              onPressed: _attemptCapture,
-              icon: const Icon(Icons.camera),
-              label: const Text('Capture'),
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                FloatingActionButton.extended(
+                  heroTag: 'record',
+                  backgroundColor: _recording ? Colors.red : null,
+                  onPressed: _toggleRecording,
+                  icon: Icon(_recording ? Icons.stop : Icons.fiber_manual_record),
+                  label: Text(_recording ? 'Stop' : 'Record'),
+                ),
+                const SizedBox(width: 12),
+                FloatingActionButton.small(
+                  heroTag: 'burst',
+                  tooltip: 'Burst (5 shots)',
+                  onPressed: _burst,
+                  child: const Icon(Icons.burst_mode),
+                ),
+                const SizedBox(width: 12),
+                FloatingActionButton.small(
+                  heroTag: 'bracket',
+                  tooltip: 'EV bracket (-2/0/+2)',
+                  onPressed: _bracket,
+                  child: const Icon(Icons.exposure),
+                ),
+                const SizedBox(width: 12),
+                FloatingActionButton.extended(
+                  heroTag: 'capture',
+                  onPressed: _attemptCapture,
+                  icon: const Icon(Icons.camera),
+                  label: const Text('Capture'),
+                ),
+              ],
             ),
       body: controller == null
           ? const Center(child: CircularProgressIndicator())

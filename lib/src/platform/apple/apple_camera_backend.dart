@@ -416,19 +416,44 @@ class AppleCameraBackend implements CameraBackend {
     );
   }
 
+  String? _recordingPath;
+  DateTime? _recordingStart;
+
   @override
   Future<void> startVideoRecording(String path) async {
-    throw const CameraFeatureNotSupportedError(
-      feature: 'Video recording',
-      platformReason: 'AVCaptureMovieFileOutput wiring is roadmap',
-    );
+    final cPath = path.toNativeUtf8(allocator: pkg_ffi.malloc);
+    try {
+      _check(hal.camera_hal_start_recording(_ctx, cPath.cast<ffi.Char>()));
+      _recordingPath = path;
+      _recordingStart = DateTime.now();
+    } finally {
+      pkg_ffi.malloc.free(cPath);
+    }
   }
 
   @override
   Future<VideoResult> stopVideoRecording() async {
-    throw const CameraFeatureNotSupportedError(
-      feature: 'Video recording',
-      platformReason: 'AVCaptureMovieFileOutput wiring is roadmap',
+    final path = _recordingPath;
+    final start = _recordingStart;
+    if (path == null || start == null) {
+      throw CameraCaptureError(reason: CaptureFailureReason.interrupted);
+    }
+    // The HAL blocks until the .mov is finalized on disk.
+    _check(hal.camera_hal_stop_recording(_ctx));
+    _recordingPath = null;
+    _recordingStart = null;
+    final file = File(path);
+    // Recording happens at the active session preset; report the true frame
+    // dimensions from the preview stream rather than assuming a resolution.
+    final frame = latestFrame();
+    return VideoResult(
+      path: path,
+      duration: DateTime.now().difference(start),
+      codec: VideoCodec.h264,
+      resolution: frame != null
+          ? VideoResolution(frame.width, frame.height)
+          : VideoResolution.fhd1080p,
+      fileSizeBytes: file.existsSync() ? file.lengthSync() : null,
     );
   }
 

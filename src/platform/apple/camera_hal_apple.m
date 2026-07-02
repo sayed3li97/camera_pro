@@ -51,6 +51,10 @@
 @property(nonatomic, strong) AVCaptureVideoDataOutput* dataOutput;
 @property(nonatomic, strong) id frameDelegate;  // CPFrameDelegate
 @property(nonatomic, strong) dispatch_queue_t frameQueue;
+
+// Video recording
+@property(nonatomic, strong) AVCaptureMovieFileOutput* movieOutput;
+@property(nonatomic, strong) id movieDelegate;  // CPMovieDelegate
 @end
 
 @implementation CPAppleContext
@@ -94,6 +98,28 @@
   self.height = (int32_t)h;
   self.frameCount++;
   [self.lock unlock];
+}
+@end
+
+// Signals when AVCaptureMovieFileOutput finishes writing the file, so
+// camera_hal_stop_recording can block until the .mov is finalized on disk.
+@interface CPMovieDelegate : NSObject <AVCaptureFileOutputRecordingDelegate>
+@property(nonatomic, strong) dispatch_semaphore_t done;
+@property(nonatomic, strong) NSError* finishError;
+@end
+
+@implementation CPMovieDelegate
+- (instancetype)init {
+  if ((self = [super init])) { _done = dispatch_semaphore_create(0); }
+  return self;
+}
+- (void)captureOutput:(AVCaptureFileOutput*)output
+    didFinishRecordingToOutputFileAtURL:(NSURL*)outputFileURL
+                        fromConnections:(NSArray<AVCaptureConnection*>*)connections
+                                  error:(NSError*)error {
+  (void)output; (void)outputFileURL; (void)connections;
+  self.finishError = error;
+  dispatch_semaphore_signal(self.done);
 }
 @end
 
@@ -503,16 +529,56 @@ camera_error_t camera_hal_set_video_config(camera_context_t* ctx, int32_t w, int
   return CAMERA_ERROR_FEATURE_NOT_SUPPORTED;
 }
 camera_error_t camera_hal_start_recording(camera_context_t* ctx, const char* path) {
-  (void)ctx; (void)path; return CAMERA_ERROR_FEATURE_NOT_SUPPORTED;
+  if (!ctx || !path) return CAMERA_ERROR_INVALID_PARAMETER;
+  @autoreleasepool {
+    CPAppleContext* c = CTX(ctx);
+    if (!c.session) return CAMERA_ERROR_NOT_INITIALIZED;
+    if (!c.session.isRunning) return CAMERA_ERROR_SESSION_INTERRUPTED;
+    if (c.movieOutput && ((AVCaptureMovieFileOutput*)c.movieOutput).isRecording) {
+      return CAMERA_ERROR_ALREADY_INITIALIZED;
+    }
+
+    if (!c.movieOutput) {
+      AVCaptureMovieFileOutput* out = [[AVCaptureMovieFileOutput alloc] init];
+      if (![c.session canAddOutput:out]) return CAMERA_ERROR_CONFIGURATION_FAILED;
+      [c.session addOutput:out];
+      c.movieOutput = out;
+    }
+
+    CPMovieDelegate* del = [CPMovieDelegate new];
+    c.movieDelegate = del;
+    NSURL* url = [NSURL fileURLWithPath:@(path)];
+    [(AVCaptureMovieFileOutput*)c.movieOutput startRecordingToOutputFileURL:url
+                                                          recordingDelegate:del];
+    set_state(c, CAMERA_STATE_RECORDING);
+    return CAMERA_OK;
+  }
 }
+
 camera_error_t camera_hal_pause_recording(camera_context_t* ctx) {
+  // AVCaptureMovieFileOutput pause/resume is iOS-only API; not offered here.
   (void)ctx; return CAMERA_ERROR_FEATURE_NOT_SUPPORTED;
 }
 camera_error_t camera_hal_resume_recording(camera_context_t* ctx) {
   (void)ctx; return CAMERA_ERROR_FEATURE_NOT_SUPPORTED;
 }
+
 camera_error_t camera_hal_stop_recording(camera_context_t* ctx) {
-  (void)ctx; return CAMERA_ERROR_FEATURE_NOT_SUPPORTED;
+  if (!ctx) return CAMERA_ERROR_NOT_INITIALIZED;
+  @autoreleasepool {
+    CPAppleContext* c = CTX(ctx);
+    AVCaptureMovieFileOutput* out = (AVCaptureMovieFileOutput*)c.movieOutput;
+    CPMovieDelegate* del = (CPMovieDelegate*)c.movieDelegate;
+    if (!out || !out.isRecording || !del) return CAMERA_ERROR_NOT_INITIALIZED;
+
+    [out stopRecording];
+    // Block until the file is finalized (or time out after 10s).
+    long rc = dispatch_semaphore_wait(
+        del.done, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC));
+    set_state(c, CAMERA_STATE_PREVIEWING);
+    if (rc != 0) return CAMERA_ERROR_TIMEOUT;
+    return del.finishError ? CAMERA_ERROR_CAPTURE_FAILED : CAMERA_OK;
+  }
 }
 camera_error_t camera_hal_set_audio_enabled(camera_context_t* ctx, bool enabled) {
   (void)ctx; (void)enabled; return CAMERA_ERROR_FEATURE_NOT_SUPPORTED;

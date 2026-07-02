@@ -329,6 +329,73 @@ class CameraProController {
     }
   }
 
+  /// Captures [count] photos back-to-back as fast as encoding allows.
+  ///
+  /// Each frame goes through the normal capture path (all digital
+  /// manual-control adjustments applied). Returns the photos in order.
+  Future<List<CapturedPhoto>> captureBurst({
+    int count = 5,
+    ImageFormat? format,
+  }) async {
+    if (count < 1) {
+      throw CameraInvalidParameterError(message: 'Burst count must be >= 1');
+    }
+    final photos = <CapturedPhoto>[];
+    for (var i = 0; i < count; i++) {
+      photos.add(await capturePhoto(format: format));
+    }
+    return photos;
+  }
+
+  /// Captures one photo per EV offset in [stops] (e.g. `[-2, 0, 2]`),
+  /// restoring the previous exposure compensation afterwards.
+  Future<List<CapturedPhoto>> captureExposureBracket({
+    required List<double> stops,
+    ImageFormat? format,
+  }) async {
+    if (stops.isEmpty) {
+      throw CameraInvalidParameterError(message: 'Bracket needs >= 1 stop');
+    }
+    final previous = _settings.exposureCompensation ?? const Ev(0);
+    final photos = <CapturedPhoto>[];
+    try {
+      for (final stop in stops) {
+        await setExposureCompensation(Ev(stop));
+        // Let at least one adjusted frame land before grabbing it.
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        photos.add(await capturePhoto(format: format));
+      }
+    } finally {
+      await setExposureCompensation(previous);
+    }
+    return photos;
+  }
+
+  // ── Video recording ────────────────────────────────────────────────────
+
+  /// Starts recording video to [path]. Requires an active preview.
+  Future<void> startVideoRecording(String path) async {
+    if (state != CameraState.previewing) {
+      throw CameraStateException('Cannot record in state ${state.name}');
+    }
+    await _backend.startVideoRecording(path);
+    _stateMachine.transition(CameraState.recording);
+  }
+
+  /// Stops recording and returns the finalized [VideoResult].
+  Future<VideoResult> stopVideoRecording() async {
+    if (state != CameraState.recording) {
+      throw CameraStateException('Not recording (state ${state.name})');
+    }
+    try {
+      return await _backend.stopVideoRecording();
+    } finally {
+      if (_stateMachine.canTransitionTo(CameraState.previewing)) {
+        _stateMachine.transition(CameraState.previewing);
+      }
+    }
+  }
+
   /// Releases all resources.
   Future<void> dispose() async {
     if (_stateMachine.canTransitionTo(CameraState.disposed)) {
