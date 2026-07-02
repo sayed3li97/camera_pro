@@ -19,7 +19,10 @@
 #  define CAMERA_PRO_HAVE_NEON 1
 #endif
 
-#if defined(__SSE2__)
+#if defined(__SSSE3__)
+#  include <tmmintrin.h>
+#  define CAMERA_PRO_HAVE_SSSE3 1
+#elif defined(__SSE2__)
 #  include <emmintrin.h>
 #  define CAMERA_PRO_HAVE_SSE2 1
 #endif
@@ -35,7 +38,7 @@ int32_t camera_pro_simd_level(void) {
     return CAMERA_SIMD_NEON;
 #elif defined(__AVX2__)
     return CAMERA_SIMD_AVX2;
-#elif defined(CAMERA_PRO_HAVE_SSE2)
+#elif defined(CAMERA_PRO_HAVE_SSSE3) || defined(CAMERA_PRO_HAVE_SSE2)
     return CAMERA_SIMD_SSE2;
 #else
     return CAMERA_SIMD_SCALAR;
@@ -139,8 +142,55 @@ void camera_pro_compute_histogram_rgba(
             b_hist[b]++;
         }
     }
+#elif defined(CAMERA_PRO_HAVE_SSSE3)
+    memset(luma_hist, 0, 256 * sizeof(uint32_t));
+    memset(r_hist,    0, 256 * sizeof(uint32_t));
+    memset(g_hist,    0, 256 * sizeof(uint32_t));
+    memset(b_hist,    0, 256 * sizeof(uint32_t));
+
+    /* maddubs computes u8*i8 pairs with i16 SATURATION, so split the luma
+     * coefficients so no pair can exceed 32767: (77r + 29b) max 27030 and
+     * (150g) max 38250 — the latter alone still fits u16 but not i16, so give
+     * g its own pass with coefficient split 75+75. Sum both passes in 32-bit. */
+    const __m128i c_rb = _mm_set1_epi32((int)0x001D004Du); /* [77,0,29,0] */
+    const __m128i ones16 = _mm_set1_epi16(1);
+
+    for (int32_t y = 0; y < height; y++) {
+        const uint8_t* row = rgba + (size_t)y * stride;
+        int32_t x = 0;
+        for (; x + 4 <= width; x += 4) {
+            __m128i px = _mm_loadu_si128((const __m128i*)(row + (size_t)x * 4));
+            /* rb: byte pairs (r*77 + g*0) and (b*29 + a*0) → madd → r*77+b*29 */
+            __m128i rb = _mm_madd_epi16(_mm_maddubs_epi16(px, c_rb), ones16);
+            /* g*150 would saturate maddubs' i16 result (38250 > 32767), so
+             * compute g*75 and double it in 32-bit space. */
+            __m128i g1 = _mm_madd_epi16(
+                _mm_maddubs_epi16(px, _mm_set1_epi32(0x00004B00)), ones16);
+            __m128i luma = _mm_add_epi32(rb, _mm_add_epi32(g1, g1));
+            luma = _mm_srli_epi32(luma, 8);
+
+            uint32_t lv[4];
+            _mm_storeu_si128((__m128i*)lv, luma);
+            for (int i = 0; i < 4; i++) {
+                const uint8_t* p = row + (size_t)(x + i) * 4;
+                luma_hist[lv[i] > 255 ? 255 : lv[i]]++;
+                r_hist[p[0]]++;
+                g_hist[p[1]]++;
+                b_hist[p[2]]++;
+            }
+        }
+        for (; x < width; x++) {
+            uint8_t r = row[x * 4 + 0];
+            uint8_t g = row[x * 4 + 1];
+            uint8_t b = row[x * 4 + 2];
+            luma_hist[luma_u8(r, g, b)]++;
+            r_hist[r]++;
+            g_hist[g]++;
+            b_hist[b]++;
+        }
+    }
 #else
-    /* No NEON — the scalar reference is already the fast path. */
+    /* No SIMD — the scalar reference is already the fast path. */
     camera_pro_compute_histogram_rgba_scalar(
         rgba, width, height, stride, luma_hist, r_hist, g_hist, b_hist);
 #endif

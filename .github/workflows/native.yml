@@ -55,7 +55,7 @@ jobs:
 
       - name: Build and run core tests (stub backend)
         run: |
-          gcc -std=c11 -O2 -Wall -Wextra -Werror -I src/core -I src/hal \
+          gcc -std=c11 -O2 -mssse3 -Wall -Wextra -Werror -I src/core -I src/hal \
             src/core/*.c src/platform/stub/camera_hal_stub.c src/tests/core_test.c \
             -o core_test -lpthread -lm
           ./core_test

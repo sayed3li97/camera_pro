@@ -132,6 +132,40 @@ static void test_format_conversion(void) {
 
     CHECK(camera_pro_nv12_to_rgba(NULL, u, W, W, rgba, W, H) == CAMERA_ERROR_INVALID_PARAMETER,
           "null input rejected");
+
+    /* SIMD YUV path vs an independent scalar reference (random planes, odd
+     * width so both the vector body and the scalar tail run). */
+    {
+        const int32_t RW = 33, RH = 10, UVS = (RW + 1) / 2;
+        uint8_t ry[33 * 10], ru[17 * 5], rv[17 * 5];
+        for (size_t i = 0; i < sizeof(ry); i++) ry[i] = (uint8_t)(xrand() & 0xFF);
+        for (size_t i = 0; i < sizeof(ru); i++) ru[i] = (uint8_t)(xrand() & 0xFF);
+        for (size_t i = 0; i < sizeof(rv); i++) rv[i] = (uint8_t)(xrand() & 0xFF);
+
+        uint8_t* got = (uint8_t*)malloc((size_t)RW * RH * 4);
+        camera_pro_yuv420p_to_rgba(ry, ru, rv, RW, UVS, got, RW, RH);
+
+        int exact = 1;
+        for (int32_t j = 0; j < RH && exact; j++) {
+            for (int32_t i = 0; i < RW; i++) {
+                int c = ry[j * RW + i] - 16; if (c < 0) c = 0;
+                int d = ru[(j / 2) * UVS + i / 2] - 128;
+                int e = rv[(j / 2) * UVS + i / 2] - 128;
+                int er = (298 * c + 409 * e + 128) >> 8;
+                int eg = (298 * c - 100 * d - 208 * e + 128) >> 8;
+                int eb = (298 * c + 516 * d + 128) >> 8;
+                er = er < 0 ? 0 : (er > 255 ? 255 : er);
+                eg = eg < 0 ? 0 : (eg > 255 ? 255 : eg);
+                eb = eb < 0 ? 0 : (eb > 255 ? 255 : eb);
+                const uint8_t* p = got + ((size_t)j * RW + i) * 4;
+                if (p[0] != er || p[1] != eg || p[2] != eb || p[3] != 255) {
+                    exact = 0; break;
+                }
+            }
+        }
+        CHECK(exact, "YUV420->RGBA (SIMD+tail) bit-exact vs reference");
+        free(got);
+    }
 }
 
 static void test_visual_aids(void) {
