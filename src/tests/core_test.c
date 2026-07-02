@@ -328,8 +328,9 @@ static void test_dng_writer(void) {
     CHECK(f != NULL, "file exists");
     if (f) {
         uint8_t hdr[8] = {0};
-        fread(hdr, 1, 8, f);
-        CHECK(hdr[0] == 'I' && hdr[1] == 'I' && hdr[2] == 42, "TIFF little-endian magic");
+        size_t got = fread(hdr, 1, 8, f);
+        CHECK(got == 8 && hdr[0] == 'I' && hdr[1] == 'I' && hdr[2] == 42,
+              "TIFF little-endian magic");
         fseek(f, 0, SEEK_END);
         long size = ftell(f);
         CHECK(size > (long)(W * H * 3), "file larger than raw pixel payload");
