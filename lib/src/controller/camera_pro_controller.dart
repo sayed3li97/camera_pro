@@ -16,6 +16,8 @@ import '../models/capabilities.dart';
 import '../models/capture_result.dart';
 import '../models/errors.dart';
 import '../models/settings.dart';
+import '../models/stream_config.dart';
+import '../processing/frame_processor.dart';
 import 'camera_backend.dart';
 import 'camera_state_machine.dart';
 import 'camera_tier.dart';
@@ -164,8 +166,30 @@ class CameraProController {
   /// Stops the live preview frame stream.
   Future<void> stopPreviewStream() => _backend.stopFrameStream();
 
+  final List<FrameProcessor> _frameProcessors = <FrameProcessor>[];
+
+  /// Attaches a [FrameProcessor]; it receives every subsequently polled frame.
+  void addFrameProcessor(FrameProcessor processor) {
+    _frameProcessors.add(processor);
+    processor.onAttach(_capabilities);
+  }
+
+  /// Detaches a previously added processor.
+  void removeFrameProcessor(FrameProcessor processor) {
+    if (_frameProcessors.remove(processor)) processor.onDetach();
+  }
+
   /// The most recent preview frame, or null if none has arrived yet.
-  PreviewFrame? latestPreviewFrame() => _backend.latestFrame();
+  /// Attached [FrameProcessor]s are invoked with each frame returned here.
+  PreviewFrame? latestPreviewFrame() {
+    final frame = _backend.latestFrame();
+    if (frame != null) {
+      for (final p in _frameProcessors) {
+        p.onFrame(frame);
+      }
+    }
+    return frame;
+  }
 
   /// Number of preview frames delivered so far.
   int get previewFrameCount => _backend.frameCount;
@@ -369,6 +393,16 @@ class CameraProController {
       await setExposureCompensation(previous);
     }
     return photos;
+  }
+
+  /// Starts a live stream. The API is modelled; the native RTMP/SRT client is
+  /// roadmap, so this currently throws a typed error rather than pretending.
+  Future<void> startStreaming(StreamConfig config) async {
+    throw CameraFeatureNotSupportedError(
+      feature: 'Live streaming (${config.protocol.name.toUpperCase()})',
+      platformReason:
+          'Streaming transport (RTMP/SRT client) is not yet implemented',
+    );
   }
 
   // ── Video recording ────────────────────────────────────────────────────

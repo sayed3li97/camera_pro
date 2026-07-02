@@ -67,6 +67,33 @@ const List<DeviceQuirkEntry> kDeviceQuirks = <DeviceQuirkEntry>[
     modelPrefix: 'ELS-',
     quirks: <DeviceQuirk>{DeviceQuirk.burstLimit10},
   ),
+  // Community-reported (flutter/flutter camera plugin issue tracker):
+  // EIS crop offsets tap-to-focus coordinates on Pixel 6/7 family.
+  DeviceQuirkEntry(
+    manufacturer: 'google',
+    modelPrefix: 'Pixel 6',
+    quirks: <DeviceQuirk>{DeviceQuirk.eisCropsPreview},
+  ),
+  DeviceQuirkEntry(
+    manufacturer: 'google',
+    modelPrefix: 'Pixel 7',
+    quirks: <DeviceQuirk>{DeviceQuirk.eisCropsPreview},
+  ),
+  // Samsung A-series (LIMITED hardware level): slow AF convergence widely
+  // reported; manual exposure kicks the AF trigger on some builds.
+  DeviceQuirkEntry(
+    manufacturer: 'samsung',
+    modelPrefix: 'SM-A5',
+    quirks: <DeviceQuirk>{
+      DeviceQuirk.slowAfLock,
+      DeviceQuirk.manualExposureResetsFocus,
+    },
+  ),
+  DeviceQuirkEntry(
+    manufacturer: 'xiaomi',
+    modelPrefix: '2201',
+    quirks: <DeviceQuirk>{DeviceQuirk.wbIgnoredInVideo},
+  ),
 ];
 
 /// Returns the quirks for a device, matching manufacturer (case-insensitive)

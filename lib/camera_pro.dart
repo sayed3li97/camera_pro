@@ -27,6 +27,8 @@ export 'src/models/capture_result.dart'
     show BurstFrame, CapturedPhoto, DepthData, ExifData, VideoResult;
 export 'src/models/errors.dart';
 export 'src/models/settings.dart';
+export 'src/models/stream_config.dart'
+    show StreamConfig, StreamHealth, StreamState, StreamStatus;
 // Platform
 export 'src/platform/apple/apple_camera_backend.dart' show AppleCameraBackend;
 export 'src/platform/apple/metal_compute.dart' show MetalCompute;
@@ -35,6 +37,7 @@ export 'src/platform/device_quirks.dart'
 export 'src/platform/thermal.dart'
     show ThermalLevel, ThermalPolicy, ThermalStatus;
 // Processing
+export 'src/processing/frame_processor.dart' show FrameProcessor;
 export 'src/processing/histogram.dart' show HistogramData;
 export 'src/processing/waveform.dart' show WaveformData;
 // Utils

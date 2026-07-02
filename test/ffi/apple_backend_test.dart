@@ -40,6 +40,30 @@ void main() {
     expect(determineTier(caps), CameraTier.full);
   });
 
+  test('multi-camera: two backends open different devices concurrently',
+      () async {
+    final a = AppleCameraBackend();
+    final b = AppleCameraBackend();
+    addTearDown(a.close);
+    addTearDown(b.close);
+
+    final devices = (await a.enumerateDevices()).devices;
+    await b.enumerateDevices();
+    if (devices.length < 2) {
+      markTestSkipped('host has fewer than 2 cameras');
+      return;
+    }
+
+    await a.open(devices[0]);
+    await b.open(devices[1]);
+    final capsA = await a.getCapabilities();
+    final capsB = await b.getCapabilities();
+    expect(capsA.deviceName, isNotEmpty);
+    expect(capsB.deviceName, isNotEmpty);
+    expect(capsA.deviceName, isNot(equals(capsB.deviceName)),
+        reason: 'each backend holds its own device');
+  });
+
   test('every digital manual control applies without a native crash', () async {
     final controller = await CameraPro.create(backend: AppleCameraBackend());
     addTearDown(controller.dispose);
