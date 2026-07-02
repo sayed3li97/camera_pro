@@ -1,0 +1,91 @@
+# native.yml — CI for the camera_pro native core + platform HAL backends.
+#
+# Verification status: workflow authored against the repo layout; jobs run on
+# GitHub-hosted runners (macos-14 / ubuntu-latest / windows-latest) which have
+# no camera hardware, so hal_lifecycle_test must pass with 0 devices.
+#
+# Copyright (c) 2026 camera_pro contributors. BSD-3-Clause.
+name: native
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  core-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and run core tests (stub backend)
+        run: |
+          clang -std=c11 -O2 -Wall -Wextra -Werror -I src/core -I src/hal \
+            src/core/*.c src/platform/stub/camera_hal_stub.c src/tests/core_test.c \
+            -o core_test
+          ./core_test
+
+      - name: Compile Apple AVFoundation backend (compile-only)
+        run: |
+          clang -fobjc-arc -O2 -Wall -Wextra -c src/platform/apple/camera_hal_apple.m \
+            -I src/core -I src/hal -I src/platform/apple \
+            -o camera_hal_apple.o
+
+      - name: Build and run HAL lifecycle test (Apple backend)
+        run: |
+          clang -std=c11 -O2 -Wall -Wextra -Werror -I src/core -I src/hal \
+            src/core/*.c src/tests/hal_lifecycle_test.c camera_hal_apple.o \
+            -framework AVFoundation -framework Foundation \
+            -framework CoreMedia -framework CoreVideo \
+            -o hal_lifecycle_test_apple
+          ./hal_lifecycle_test_apple
+
+  linux-v4l2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and run HAL lifecycle test (V4L2 backend)
+        run: |
+          gcc -std=c11 -O2 -Wall -Wextra -Werror -I src/core -I src/hal \
+            src/core/*.c src/platform/linux/camera_hal_linux.c src/tests/hal_lifecycle_test.c \
+            -o hal_lifecycle_test_linux -lpthread -lm
+          ./hal_lifecycle_test_linux
+
+      - name: Build and run core tests (stub backend)
+        run: |
+          gcc -std=c11 -O2 -Wall -Wextra -Werror -I src/core -I src/hal \
+            src/core/*.c src/platform/stub/camera_hal_stub.c src/tests/core_test.c \
+            -o core_test -lpthread -lm
+          ./core_test
+
+  windows-mf:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      # Media Foundation is an optional feature on Windows Server SKUs and the
+      # test exe statically imports mfplat.dll — without it the process cannot
+      # even start. No-op when the runner image already ships the feature.
+      - name: Ensure Media Foundation is installed (Server SKU)
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "$env:windir\System32\mfplat.dll")) {
+            Install-WindowsFeature Server-Media-Foundation
+          }
+
+      # C sources need /std:c11 /experimental:c11atomics for <stdatomic.h>
+      # (buffer_pool.c); the C++ backend is compiled separately so those
+      # C-only flags are never applied to a .cpp TU, and it gets /EHsc.
+      # Steps chain with && because `shell: cmd` only fails on the LAST
+      # command's exit code.
+      - name: Build and run HAL lifecycle test (Media Foundation backend)
+        shell: cmd
+        run: cl /nologo /W4 /O2 /std:c11 /experimental:c11atomics /I src\core /I src\hal /c src\core\*.c src\tests\hal_lifecycle_test.c && cl /nologo /W4 /O2 /EHsc /I src\core /I src\hal /c src\platform\windows\camera_hal_windows.cpp && link /nologo /OUT:hal_test.exe *.obj mfplat.lib mf.lib mfreadwrite.lib mfuuid.lib ole32.lib strmiids.lib oleaut32.lib && hal_test.exe
+
+      - name: Build and run core tests (stub backend)
+        shell: cmd
+        run: cl /nologo /W4 /O2 /std:c11 /experimental:c11atomics /I src\core /I src\hal src\core\*.c src\platform\stub\camera_hal_stub.c src\tests\core_test.c /Fe:core_test.exe && core_test.exe

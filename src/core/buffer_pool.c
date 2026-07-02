@@ -15,6 +15,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The Windows UCRT has no C11 aligned_alloc (and memory from _aligned_malloc
+ * must NOT be passed to free()); paper over the difference here. Note the
+ * swapped argument order between the two APIs. */
+#if defined(_WIN32)
+#  include <malloc.h>
+#  define cp_aligned_alloc(alignment, size) _aligned_malloc((size), (alignment))
+#  define cp_aligned_free(ptr)              _aligned_free(ptr)
+#else
+#  define cp_aligned_alloc(alignment, size) aligned_alloc((alignment), (size))
+#  define cp_aligned_free(ptr)              free(ptr)
+#endif
+
 #define CAMERA_PRO_POOL_MAX 64
 #define CAMERA_PRO_ALIGN    64  /* cache line, good for NEON/SSE loads */
 
@@ -50,10 +62,10 @@ camera_pro_buffer_pool_create(int32_t buffer_size, int32_t buffer_count) {
 
     for (int32_t i = 0; i < buffer_count; i++) {
         /* aligned_alloc requires size to be a multiple of the alignment. */
-        pool->buffers[i].data = (uint8_t*)aligned_alloc(CAMERA_PRO_ALIGN, (size_t)pool->buffer_size);
+        pool->buffers[i].data = (uint8_t*)cp_aligned_alloc(CAMERA_PRO_ALIGN, (size_t)pool->buffer_size);
         if (!pool->buffers[i].data) {
             /* Roll back partial allocation. */
-            for (int32_t j = 0; j < i; j++) free(pool->buffers[j].data);
+            for (int32_t j = 0; j < i; j++) cp_aligned_free(pool->buffers[j].data);
             free(pool);
             return NULL;
         }
@@ -112,7 +124,7 @@ void
 camera_pro_buffer_pool_destroy(camera_pro_buffer_pool_t* pool) {
     if (!pool) return;
     for (int32_t i = 0; i < pool->count; i++) {
-        free(pool->buffers[i].data);
+        cp_aligned_free(pool->buffers[i].data);
     }
     free(pool);
 }
