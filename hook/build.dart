@@ -31,7 +31,10 @@ void main(List<String> args) async {
       'src/core/camera_pro_core.c',
     ];
     final backendSources = isApple
-        ? <String>['src/platform/apple/camera_hal_apple.m']
+        ? <String>[
+            'src/platform/apple/camera_hal_apple.m',
+            'src/platform/apple/metal_processor.m',
+          ]
         : <String>['src/platform/stub/camera_hal_stub.c'];
 
     final builder = CBuilder.library(
@@ -45,7 +48,13 @@ void main(List<String> args) async {
         if (isApple) 'src/platform/apple',
       ],
       frameworks: isApple
-          ? <String>['AVFoundation', 'Foundation', 'CoreMedia', 'CoreVideo']
+          ? <String>[
+              'AVFoundation',
+              'Foundation',
+              'CoreMedia',
+              'CoreVideo',
+              'Metal',
+            ]
           : <String>[],
       flags: <String>[
         '-ffast-math',

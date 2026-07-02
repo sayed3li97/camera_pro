@@ -76,6 +76,26 @@ CAMERA_PRO_EXPORT int32_t camera_pro_apple_copy_latest_frame(
     camera_context_t* ctx, uint8_t* out, int32_t cap,
     int32_t* width, int32_t* height);
 
+/* ── Metal GPU compute (metal_processor.m) ─────────────────────────────────
+ * Runtime-compiled MSL kernels, bit-compatible with the C CPU kernels. Used
+ * for runtime GPU/CPU dispatch selection. All return CAMERA_OK, or
+ * CAMERA_ERROR_FEATURE_NOT_SUPPORTED when no Metal device exists.
+ * ───────────────────────────────────────────────────────────────────────── */
+CAMERA_PRO_EXPORT int32_t camera_pro_metal_available(void);
+CAMERA_PRO_EXPORT const char* camera_pro_metal_device_name(void);
+
+CAMERA_PRO_EXPORT int32_t camera_pro_metal_histogram(
+    const uint8_t* rgba, int32_t width, int32_t height, int32_t is_bgra,
+    uint32_t* luma_hist, uint32_t* r_hist, uint32_t* g_hist, uint32_t* b_hist);
+
+CAMERA_PRO_EXPORT int32_t camera_pro_metal_focus_peaking(
+    const uint8_t* in_px, uint8_t* out_px, int32_t width, int32_t height,
+    int32_t is_bgra, float threshold, uint32_t peak_color);
+
+CAMERA_PRO_EXPORT int32_t camera_pro_metal_zebra(
+    const uint8_t* in_px, uint8_t* out_px, int32_t width, int32_t height,
+    int32_t is_bgra, float threshold, int32_t frame_counter);
+
 #ifdef __cplusplus
 }
 #endif

@@ -179,6 +179,54 @@ external int camera_pro_apple_copy_latest_frame(
   ffi.Pointer<ffi.Int32> height,
 );
 
+// ── Metal GPU compute (Apple) ───────────────────────────────────────────────
+
+@ffi.Native<ffi.Int32 Function()>()
+external int camera_pro_metal_available();
+
+@ffi.Native<ffi.Pointer<ffi.Char> Function()>()
+external ffi.Pointer<ffi.Char> camera_pro_metal_device_name();
+
+@ffi.Native<
+    ffi.Int32 Function(
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Float,
+      ffi.Uint32,
+    )>()
+external int camera_pro_metal_focus_peaking(
+  ffi.Pointer<ffi.Uint8> inPx,
+  ffi.Pointer<ffi.Uint8> outPx,
+  int width,
+  int height,
+  int isBgra,
+  double threshold,
+  int peakColor,
+);
+
+@ffi.Native<
+    ffi.Int32 Function(
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Float,
+      ffi.Int32,
+    )>()
+external int camera_pro_metal_zebra(
+  ffi.Pointer<ffi.Uint8> inPx,
+  ffi.Pointer<ffi.Uint8> outPx,
+  int width,
+  int height,
+  int isBgra,
+  double threshold,
+  int frameCounter,
+);
+
 // ── Apple flat accessors ────────────────────────────────────────────────────
 
 @ffi.Native<ffi.Int32 Function(ffi.Pointer<CameraHalContext>)>()

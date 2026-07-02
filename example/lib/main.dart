@@ -130,20 +130,34 @@ class _CapabilityPageState extends State<CapabilityPage> {
     // Apply the selected visual-aid overlay in the native C core.
     var pixels = frame.bytes;
     if (_focusPeaking) {
-      pixels = NativeCore.focusPeaking(
-        frame.bytes,
-        width: frame.width,
-        height: frame.height,
-        isBgra: frame.isBgra,
-        threshold: 0.1,
-        peakColor: 0x00FFFFFF, // cyan (classic focus-peaking colour)
-      );
+      // GPU (Metal) when available, CPU (SIMD C) otherwise — same output.
+      pixels = MetalCompute.focusPeaking(
+            frame.bytes,
+            width: frame.width,
+            height: frame.height,
+            isBgra: frame.isBgra,
+            threshold: 0.1,
+            peakColor: 0x00FFFFFF,
+          ) ??
+          NativeCore.focusPeaking(
+            frame.bytes,
+            width: frame.width,
+            height: frame.height,
+            isBgra: frame.isBgra,
+            threshold: 0.1,
+            peakColor: 0x00FFFFFF, // cyan (classic focus-peaking colour)
+          );
     } else if (_zebra) {
-      pixels = NativeCore.zebra(frame.bytes,
-          width: frame.width,
-          height: frame.height,
-          isBgra: frame.isBgra,
-          frameCounter: _frames);
+      pixels = MetalCompute.zebra(frame.bytes,
+              width: frame.width,
+              height: frame.height,
+              isBgra: frame.isBgra,
+              frameCounter: _frames) ??
+          NativeCore.zebra(frame.bytes,
+              width: frame.width,
+              height: frame.height,
+              isBgra: frame.isBgra,
+              frameCounter: _frames);
     } else if (_falseColor) {
       pixels = NativeCore.falseColorFromRgba(frame.bytes,
           width: frame.width, height: frame.height, isBgra: frame.isBgra);

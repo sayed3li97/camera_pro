@@ -29,6 +29,7 @@ export 'src/models/errors.dart';
 export 'src/models/settings.dart';
 // Platform
 export 'src/platform/apple/apple_camera_backend.dart' show AppleCameraBackend;
+export 'src/platform/apple/metal_compute.dart' show MetalCompute;
 export 'src/platform/device_quirks.dart'
     show DeviceQuirk, DeviceQuirkEntry, kDeviceQuirks, quirksFor;
 export 'src/platform/thermal.dart'
