@@ -246,6 +246,36 @@ external int camera_pro_box_blur(
   int radius,
 );
 
+// ── Linear-DNG (RAW) writer ─────────────────────────────────────────────────
+
+@ffi.Native<
+    ffi.Int32 Function(
+      ffi.Pointer<ffi.Char>,
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int64,
+      ffi.Pointer<ffi.Char>,
+      ffi.Pointer<ffi.Char>,
+      ffi.Pointer<ffi.Char>,
+    )>()
+external int camera_pro_write_dng(
+  ffi.Pointer<ffi.Char> path,
+  ffi.Pointer<ffi.Uint8> px,
+  int width,
+  int height,
+  int stride,
+  int isBgra,
+  int iso,
+  int exposureNs,
+  ffi.Pointer<ffi.Char> make,
+  ffi.Pointer<ffi.Char> model,
+  ffi.Pointer<ffi.Char> datetime,
+);
+
 // ── Format conversion ──────────────────────────────────────────────────────
 
 @ffi.Native<

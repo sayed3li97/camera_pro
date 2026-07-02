@@ -175,12 +175,17 @@ class _CapabilityPageState extends State<CapabilityPage> {
     if (controller == null) return;
     setState(() => _error = null);
     try {
-      final photo = await controller.capturePhoto(format: ImageFormat.png);
-      setState(() => _savedPath = photo.path);
-      _showSnack('Captured ${photo.width}x${photo.height} → ${photo.path}');
+      final photo =
+          await controller.capturePhoto(format: ImageFormat.rawPlusJpeg);
+      setState(() => _savedPath = photo.rawPath ?? photo.path);
+      _showSnack('Captured ${photo.width}x${photo.height} → '
+          'DNG: ${photo.rawPath}  PNG: ${photo.jpegPath}');
     } on CameraProError catch (e) {
       setState(() => _error = '${e.runtimeType}: ${e.message}');
       _showSnack('Recovery: ${e.recovery.name}');
+    } on Object catch (e) {
+      // Non-camera errors (e.g. missing native symbol) must surface too.
+      setState(() => _error = '$e');
     }
   }
 

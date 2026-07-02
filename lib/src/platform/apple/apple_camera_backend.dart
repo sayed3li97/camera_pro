@@ -186,13 +186,17 @@ class AppleCameraBackend implements CameraBackend {
           FocusMode.autoContinuous,
           FocusMode.manual,
         ],
-        supportedPhotoFormats: const <ImageFormat>[ImageFormat.jpeg],
+        supportedPhotoFormats: const <ImageFormat>[
+          ImageFormat.png,
+          ImageFormat.raw,
+          ImageFormat.rawPlusJpeg,
+        ],
         supportedVideoResolutions: const <VideoResolution>[
           VideoResolution.fhd1080p,
         ],
         supportedFrameRates: const <int>[30],
         supportedVideoCodecs: const <VideoCodec>[VideoCodec.h264],
-        supportsRawCapture: false,
+        supportsRawCapture: true,   // linear-DNG via the C core writer
         supportsProRaw: false,
         supportsBurstMode: false,
         supportsHdr: false,
@@ -375,15 +379,91 @@ class AppleCameraBackend implements CameraBackend {
   Future<void> setTorch({required bool enabled, double intensity = 1.0}) async =>
       _check(hal.camera_hal_set_torch(_ctx, enabled, intensity));
 
+  /// Writes [frame] as a linear-DNG with EXIF (ISO/exposure from the current
+  /// digital-control state) via the C core. Returns the written path.
+  String _writeDng(PreviewFrame frame, String path) {
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final exifTime = '${now.year}:${two(now.month)}:${two(now.day)} '
+        '${two(now.hour)}:${two(now.minute)}:${two(now.second)}';
+
+    final px = pkg_ffi.malloc<ffi.Uint8>(frame.bytes.length);
+    final cPath = path.toNativeUtf8(allocator: pkg_ffi.malloc);
+    final cMake = 'camera_pro'.toNativeUtf8(allocator: pkg_ffi.malloc);
+    final cModel = 'AVFoundation'.toNativeUtf8(allocator: pkg_ffi.malloc);
+    final cTime = exifTime.toNativeUtf8(allocator: pkg_ffi.malloc);
+    try {
+      px.asTypedList(frame.bytes.length).setAll(0, frame.bytes);
+      final rc = core.camera_pro_write_dng(
+        cPath.cast<ffi.Char>(),
+        px,
+        frame.width,
+        frame.height,
+        frame.width * 4,
+        frame.isBgra ? 1 : 0,
+        (_gain * 100).round(),
+        (_shutterGain * 16666667).round(),
+        cMake.cast<ffi.Char>(),
+        cModel.cast<ffi.Char>(),
+        cTime.cast<ffi.Char>(),
+      );
+      if (rc != 0) {
+        throw CameraCaptureError(reason: CaptureFailureReason.encodingFailed);
+      }
+      return path;
+    } finally {
+      pkg_ffi.malloc.free(px);
+      pkg_ffi.malloc.free(cPath);
+      pkg_ffi.malloc.free(cMake);
+      pkg_ffi.malloc.free(cModel);
+      pkg_ffi.malloc.free(cTime);
+    }
+  }
+
   @override
   Future<CapturedPhoto> capturePhoto({ImageFormat? format}) async {
     // Capture the latest preview frame (with all digital manual-control
-    // adjustments already applied) and encode it as a PNG on disk. This is the
-    // still-capture path until AVCapturePhotoOutput is wired for full-res RAW.
+    // adjustments already applied). PNG via dart:ui, RAW as linear-DNG with
+    // EXIF via the C core; rawPlusJpeg writes both.
     final frame = latestFrame();
     if (frame == null) {
       throw CameraCaptureError(reason: CaptureFailureReason.noFrame);
     }
+
+    final ts = DateTime.now();
+    if (format == ImageFormat.raw || format == ImageFormat.rawPlusJpeg) {
+      final base =
+          '${Directory.systemTemp.path}/camera_pro_${ts.millisecondsSinceEpoch}';
+      final dngPath = _writeDng(frame, '$base.dng');
+      String? pngPath;
+      if (format == ImageFormat.rawPlusJpeg) {
+        final photo = await _encodePng(frame, '$base.png', ts);
+        pngPath = photo.path;
+      }
+      return CapturedPhoto(
+        width: frame.width,
+        height: frame.height,
+        format: format!,
+        timestamp: ts,
+        path: dngPath,
+        rawPath: dngPath,
+        jpegPath: pngPath,
+        exif: ExifData(
+          iso: (_gain * 100).round(),
+          exposureTime:
+              Duration(microseconds: (_shutterGain * 16667).round()),
+          dateTimeOriginal: ts,
+        ),
+      );
+    }
+    return _encodePng(
+        frame,
+        '${Directory.systemTemp.path}/camera_pro_${ts.millisecondsSinceEpoch}.png',
+        ts);
+  }
+
+  Future<CapturedPhoto> _encodePng(
+      PreviewFrame frame, String path, DateTime ts) async {
 
     final decodeCompleter = Completer<ui.Image>();
     ui.decodeImageFromPixels(
@@ -401,9 +481,6 @@ class AppleCameraBackend implements CameraBackend {
     }
 
     final bytes = png.buffer.asUint8List();
-    final ts = DateTime.now();
-    final path =
-        '${Directory.systemTemp.path}/camera_pro_${ts.millisecondsSinceEpoch}.png';
     await File(path).writeAsBytes(bytes, flush: true);
 
     return CapturedPhoto(

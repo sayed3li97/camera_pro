@@ -27,6 +27,7 @@ void main(List<String> args) async {
       'src/core/buffer_pool.c',
       'src/core/image_processor.c',
       'src/core/format_converter.c',
+      'src/core/dng_writer.c',
       'src/core/camera_pro_core.c',
     ];
     final backendSources = isApple

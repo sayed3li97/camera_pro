@@ -273,6 +273,39 @@ static void test_adjustments(void) {
     free(px);
 }
 
+static void test_dng_writer(void) {
+    printf("DNG writer\n");
+    const int32_t W = 32, H = 24, stride = W * 4;
+    uint8_t* px = (uint8_t*)malloc((size_t)stride * H);
+    /* Horizontal gradient so pixel data is non-trivial. */
+    for (int32_t y = 0; y < H; y++)
+        for (int32_t x = 0; x < W; x++) {
+            uint8_t* p = px + ((size_t)y * W + x) * 4;
+            p[0] = (uint8_t)(x * 8); p[1] = 128; p[2] = (uint8_t)(y * 10); p[3] = 255;
+        }
+
+    const char* out = "cp_test.dng";
+    int32_t rc = camera_pro_write_dng(out, px, W, H, stride, 0,
+                                      400, 16666667,  /* ISO 400, ~1/60s */
+                                      "camera_pro", "TestCam", "2026:07:02 12:00:00");
+    CHECK(rc == CAMERA_OK, "write returns OK");
+
+    FILE* f = fopen(out, "rb");
+    CHECK(f != NULL, "file exists");
+    if (f) {
+        uint8_t hdr[8] = {0};
+        fread(hdr, 1, 8, f);
+        CHECK(hdr[0] == 'I' && hdr[1] == 'I' && hdr[2] == 42, "TIFF little-endian magic");
+        fseek(f, 0, SEEK_END);
+        long size = ftell(f);
+        CHECK(size > (long)(W * H * 3), "file larger than raw pixel payload");
+        fclose(f);
+    }
+    CHECK(camera_pro_write_dng(NULL, px, W, H, stride, 0, 100, 0, 0, 0, 0)
+              == CAMERA_ERROR_INVALID_PARAMETER, "null path rejected");
+    free(px);
+}
+
 static void test_hal_stub(void) {
     printf("HAL stub backend\n");
     camera_context_t* ctx = NULL;
@@ -298,6 +331,7 @@ int main(void) {
     test_visual_aids();
     test_waveform_falsecolor();
     test_adjustments();
+    test_dng_writer();
     test_hal_stub();
     printf("\n=== %d checks, %d failures ===\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

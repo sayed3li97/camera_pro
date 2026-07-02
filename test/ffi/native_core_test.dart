@@ -2,9 +2,14 @@
 // by hook/build.dart. They run under `flutter test` because native assets are
 // built for the host. If the native asset isn't available (e.g. a platform
 // where the hook didn't run), the whole group is skipped rather than failing.
+import 'dart:ffi' as ffi;
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:camera_pro/camera_pro.dart';
+// ignore: implementation_imports
+import 'package:camera_pro/src/ffi/camera_pro_bindings.dart' as bindings;
+import 'package:ffi/ffi.dart' as pkg_ffi;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -128,6 +133,40 @@ void main() {
         }
       }
       expect(striped, isTrue);
+    });
+
+    test('writes a valid DNG through FFI', () async {
+      const w = 8, h = 8;
+      final rgba = Uint8List(w * h * 4);
+      for (var i = 0; i < w * h; i++) {
+        rgba[i * 4] = 200;
+        rgba[i * 4 + 1] = 100;
+        rgba[i * 4 + 2] = 50;
+        rgba[i * 4 + 3] = 255;
+      }
+      final path =
+          '${Directory.systemTemp.path}/cp_ffi_test_${DateTime.now().millisecondsSinceEpoch}.dng';
+      final px = pkg_ffi.malloc<ffi.Uint8>(rgba.length);
+      final cPath = path.toNativeUtf8(allocator: pkg_ffi.malloc);
+      final cStr = 'test'.toNativeUtf8(allocator: pkg_ffi.malloc);
+      final cTime = '2026:07:02 12:00:00'.toNativeUtf8(allocator: pkg_ffi.malloc);
+      try {
+        px.asTypedList(rgba.length).setAll(0, rgba);
+        final rc = bindings.camera_pro_write_dng(
+          cPath.cast(), px, w, h, w * 4, 0, 200, 8333333,
+          cStr.cast(), cStr.cast(), cTime.cast(),
+        );
+        expect(rc, 0);
+        final bytes = File(path).readAsBytesSync();
+        // TIFF little-endian magic "II*\0".
+        expect(bytes.sublist(0, 3), [0x49, 0x49, 0x2A]);
+        expect(bytes.length, greaterThan(w * h * 3));
+      } finally {
+        pkg_ffi.malloc.free(px);
+        pkg_ffi.malloc.free(cPath);
+        pkg_ffi.malloc.free(cStr);
+        pkg_ffi.malloc.free(cTime);
+      }
     });
 
     test('buffer pool acquires, drains, and releases', () {

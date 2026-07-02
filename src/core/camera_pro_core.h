@@ -186,6 +186,26 @@ camera_pro_compute_false_color(
     int32_t        stride,
     int32_t        is_bgra);   /* 1 = B,G,R,A channel order; 0 = R,G,B,A */
 
+/* ── Linear-DNG (RAW) writer with EXIF ─────────────────────────────────────
+ * Writes an uncompressed 8-bit linear-RGB DNG (TIFF container, DNG 1.4 tags)
+ * with an EXIF IFD (ExposureTime, ISO, DateTimeOriginal). No libtiff/libexif.
+ * datetime format: "YYYY:MM:DD HH:MM:SS" (EXIF convention). Returns CAMERA_OK
+ * or an error code.
+ * ───────────────────────────────────────────────────────────────────────── */
+CAMERA_PRO_EXPORT int32_t
+camera_pro_write_dng(
+    const char*    path,
+    const uint8_t* px,
+    int32_t        width,
+    int32_t        height,
+    int32_t        stride,
+    int32_t        is_bgra,
+    int32_t        iso,
+    int64_t        exposure_ns,
+    const char*    make,
+    const char*    model,
+    const char*    datetime);
+
 /* ── Format conversion (scalar BT.601) ─────────────────────────────────────
  * All converters write tightly-packed RGBA8888 (stride = width*4).
  * Return CAMERA_OK or an error code.
