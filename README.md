@@ -213,8 +213,8 @@ The following results were produced on macOS arm64 with Flutter 3.44.1 / Dart 3.
 |---|---|
 | C core (`clang -std=c11 -O2 -Wall -Wextra -Werror`) | **60/60 checks pass** (arm64 NEON) |
 | Same harness compiled x86_64, run under **Rosetta 2** | **60/60** — SSSE3 histogram bit-exact vs scalar |
-| Dart unit + FFI tests (`flutter test`, VM) | **79/79 pass** |
-| Dart tests **in the browser** (`flutter test --platform chrome`) | **64/64 pass** (unit + web kernels + digital pipeline + DNG, compiled to JS) |
+| Dart unit + FFI tests (`flutter test`, VM) | **80/80 pass** |
+| Dart tests **in the browser** (`flutter test --platform chrome`) | **65/65 pass** (unit + web kernels + digital pipeline + DNG, compiled to JS) |
 | `flutter analyze` (package + example) | **No issues** |
 | GitHub Actions CI (`native.yml`) | **Green**: macos-14, ubuntu (gcc `-Werror` V4L2 + `-mssse3` core), windows (MSVC /W4 Media Foundation), **web** (browser tests + web-app build) |
 | Metal GPU cross-check (`metal_test.c`, Apple M1 Pro) | Histogram + zebra **bit-exact** vs C kernels; peaking within 0.005% |
@@ -226,6 +226,7 @@ The following results were produced on macOS arm64 with Flutter 3.44.1 / Dart 3.
 | Multi-camera | Two backends opened **different physical cameras** concurrently |
 | Web sample app in Chrome (getUserMedia) | **Full manual (DSLR) tier** — 1000+ frames, all six manual controls change the feed live, all visual aids, capture ([screenshots](#web)) |
 | Web RAW capture (pure-Dart linear-DNG) | **ffmpeg-decodes** the Dart-encoded DNG (20 direntries, matches the C writer) |
+| Web video recording (MediaRecorder) | **Recorded** a 3s h264 clip (50 KB, 640×480) in-browser and reported it back |
 | dartdoc / `dart pub publish --dry-run` | **0 warnings** each |
 
 ## Web
@@ -251,6 +252,8 @@ through `MediaStreamTrack`, so — exactly like the macOS built-in camera —
 (DSLR)"** — the same tier as native. The one honest exception is aperture
 (*NotSupported*: a fixed-aperture lens has no diaphragm). RAW capture is real
 too: a pure-Dart linear-DNG encoder (port of `dng_writer.c`) that ffmpeg decodes.
+**Video recording** works via `MediaRecorder` (real h264/webm capture, returned
+as an object URL). Burst and EV bracketing run through the shared controller.
 
 Verified live in Chrome against a synthetic camera device
 (`--use-fake-device-for-media-stream`, which renders a spinning ball + timestamp):
@@ -261,6 +264,7 @@ Verified live in Chrome against a synthetic camera device
 | **Exposure** `+2.5 EV` — feed brightens (digital pipeline) | ![exposure](doc/web/wc_02_ev.png) |
 | **Zoom** `3.5×` — center crop-zoom | ![zoom](doc/web/wc_04_zoom.png) |
 | **Manual focus** `0.0` — digital defocus (box blur) | ![focus](doc/web/wc_05_focus.png) |
+| **Video recording** — real MediaRecorder capture (h264, in-browser) | ![record](doc/web/wc_07_record.png) |
 | **Live preview + histogram** — getUserMedia stream, live RGB/luma histogram overlay | ![live](doc/web/web_01_live.png) |
 | **False color** — pure-Dart exposure-zone map | ![false color](doc/web/web_02_falsecolor.png) |
 | **Focus peaking** — pure-Dart Sobel edge highlight | ![peaking](doc/web/web_03_peaking.png) |

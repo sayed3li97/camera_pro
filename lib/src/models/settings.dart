@@ -35,7 +35,7 @@ enum FlashMode { off, auto, on }
 enum ImageFormat { jpeg, png, heif, raw, rawPlusJpeg, proRaw }
 
 /// Video codec.
-enum VideoCodec { h264, hevc, prores, av1 }
+enum VideoCodec { h264, hevc, prores, av1, vp9, vp8 }
 
 /// Video color profile / gamma.
 enum ColorProfile { standard, flat, log, hlg, appleLog }

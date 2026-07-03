@@ -26,10 +26,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   web (both are implemented at the controller level and work everywhere).
 - Web sample app: a manual-control panel (ISO/EV/WB/zoom/focus sliders) plus
   `?ev=`/`?wb=`/`?zoom=`/`?focus=`/`?iso=` URL params and a `?view=caps` mode.
+- Web video recording is now **real** via `MediaRecorder` (h264/webm, returned
+  as an object URL with byte size + resolution); the video capability is only
+  advertised when the browser can actually encode it. Adds `vp9`/`vp8` to
+  `VideoCodec`. Verified live in Chrome: recorded a 3s 50 KB h264 clip.
+- Adversarial self-review fixes: web `adjustPixels` now round-to-nearest
+  matching the C `clampf_u8` (was truncating — off-by-one vs native; a
+  fractional-input test now locks parity on both VM and browser); `rawPlusJpeg`
+  dropped from web's advertised formats (the browser has no filesystem for a
+  JPEG companion, so the claim was dishonest).
 - Verified live in Chrome (exposure, zoom, and focus visibly change the feed;
-  tier shows Full manual; all capabilities Supported — screenshots in
-  `doc/web/`). VM suite 79/79; browser suite 64/64 (adds digital-pipeline + DNG
-  tests that cross-check the Dart ports against the FFI C core).
+  tier shows Full manual; all capabilities Supported; video recorded —
+  screenshots in `doc/web/`). VM suite 80/80; browser suite 65/65 (adds
+  digital-pipeline + DNG + rounding-parity tests that cross-check the Dart ports
+  against the FFI C core).
 
 **Web support (getUserMedia backend + pure-Dart visual aids)**
 

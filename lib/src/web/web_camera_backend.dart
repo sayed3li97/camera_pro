@@ -54,9 +54,35 @@ class WebCameraBackend implements CameraBackend {
       _zoom > 1.001 ||
       _blurRadius > 0;
 
+  // Video recording (MediaRecorder).
+  web.MediaRecorder? _recorder;
+  final List<web.Blob> _chunks = <web.Blob>[];
+  DateTime? _recStart;
+  Completer<void>? _recDone;
+  String _recMime = '';
+
   web.MediaStreamTrack? get _track {
     final tracks = _stream?.getVideoTracks().toDart;
     return (tracks == null || tracks.isEmpty) ? null : tracks.first;
+  }
+
+  /// The best MediaRecorder MIME type this browser supports, or '' if none.
+  String get _videoMime {
+    for (final m in const <String>[
+      'video/mp4;codecs=avc1',
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm',
+    ]) {
+      if (web.MediaRecorder.isTypeSupported(m)) return m;
+    }
+    return '';
+  }
+
+  VideoCodec _codecFor(String mime) {
+    if (mime.contains('avc1') || mime.contains('mp4')) return VideoCodec.h264;
+    if (mime.contains('vp8')) return VideoCodec.vp8;
+    return VideoCodec.vp9;
   }
 
   @override
@@ -142,16 +168,22 @@ class WebCameraBackend implements CameraBackend {
         FocusMode.autoContinuous,
         FocusMode.manual,
       ],
+      // Only PNG (in-memory RGBA) and RAW (linear-DNG bytes). rawPlusJpeg is
+      // not offered on web: it implies two file paths, and the browser has no
+      // filesystem to write a JPEG companion to.
       supportedPhotoFormats: const <ImageFormat>[
         ImageFormat.png,
         ImageFormat.raw,
-        ImageFormat.rawPlusJpeg,
       ],
-      supportedVideoResolutions: const <VideoResolution>[
-        VideoResolution.hd720p,
-      ],
-      supportedFrameRates: const <int>[30],
-      supportedVideoCodecs: const <VideoCodec>[VideoCodec.h264],
+      // Video recording is only advertised when MediaRecorder can actually
+      // encode it in this browser.
+      supportedVideoResolutions: _videoMime.isEmpty
+          ? const <VideoResolution>[]
+          : const <VideoResolution>[VideoResolution.hd720p],
+      supportedFrameRates: _videoMime.isEmpty ? const <int>[] : const <int>[30],
+      supportedVideoCodecs: _videoMime.isEmpty
+          ? const <VideoCodec>[]
+          : <VideoCodec>[_codecFor(_videoMime)],
       supportsRawCapture: true, // pure-Dart linear-DNG writer
       supportsProRaw: false,
       supportsBurstMode: true, // controller-level, works everywhere
@@ -310,7 +342,7 @@ class WebCameraBackend implements CameraBackend {
     }
     final ts = DateTime.now();
     final fmt = format ?? ImageFormat.png;
-    if (fmt == ImageFormat.raw || fmt == ImageFormat.rawPlusJpeg) {
+    if (fmt == ImageFormat.raw) {
       // Encode a real linear-DNG in pure Dart (web can't write files, so the
       // bytes are returned in memory for the caller to download/save).
       String two(int v) => v.toString().padLeft(2, '0');
@@ -352,22 +384,65 @@ class WebCameraBackend implements CameraBackend {
 
   @override
   Future<void> startVideoRecording(String path) async {
-    throw const CameraFeatureNotSupportedError(
-      feature: 'Video recording',
-      platformReason: 'MediaRecorder wiring is roadmap on web',
-    );
+    final stream = _stream;
+    final mime = _videoMime;
+    if (stream == null || mime.isEmpty) {
+      throw const CameraFeatureNotSupportedError(
+        feature: 'Video recording',
+        platformReason: 'MediaRecorder is unavailable in this browser',
+      );
+    }
+    _chunks.clear();
+    _recMime = mime;
+    _recDone = Completer<void>();
+    final rec = web.MediaRecorder(
+        stream, web.MediaRecorderOptions(mimeType: mime));
+    rec.addEventListener(
+        'dataavailable',
+        (web.Event e) {
+          final data = (e as web.BlobEvent).data;
+          if (data.size > 0) _chunks.add(data);
+        }.toJS);
+    rec.addEventListener('stop', ((web.Event e) {
+      if (!(_recDone?.isCompleted ?? true)) _recDone?.complete();
+    }).toJS);
+    rec.start();
+    _recorder = rec;
+    _recStart = DateTime.now();
   }
 
   @override
   Future<VideoResult> stopVideoRecording() async {
-    throw const CameraFeatureNotSupportedError(
-      feature: 'Video recording',
-      platformReason: 'MediaRecorder wiring is roadmap on web',
+    final rec = _recorder;
+    final start = _recStart;
+    if (rec == null || start == null) {
+      throw CameraCaptureError(reason: CaptureFailureReason.interrupted);
+    }
+    rec.stop();
+    await _recDone?.future; // wait for the final chunk + stop event
+    _recorder = null;
+    _recStart = null;
+
+    final blob = web.Blob(
+      _chunks.map((b) => b as JSAny).toList().toJS,
+      web.BlobPropertyBag(type: _recMime),
+    );
+    final url = web.URL.createObjectURL(blob);
+    final w = _video?.videoWidth ?? 1280;
+    final h = _video?.videoHeight ?? 720;
+    return VideoResult(
+      path: url, // object URL; a production app would download/upload it
+      duration: DateTime.now().difference(start),
+      codec: _codecFor(_recMime),
+      resolution: VideoResolution(w, h),
+      fileSizeBytes: blob.size,
     );
   }
 
   @override
   Future<void> close() async {
+    if (_recorder?.state == 'recording') _recorder?.stop();
+    _recorder = null;
     final tracks = _stream?.getTracks().toDart;
     if (tracks != null) {
       for (final t in tracks) {

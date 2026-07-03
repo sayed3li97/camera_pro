@@ -46,6 +46,9 @@ class _WebCameraPageState extends State<WebCameraPage> {
   String _overlay = 'none'; // none | peaking | zebra | falsecolor | waveform
   WaveformData? _wf;
 
+  bool _recording = false;
+  String? _recResult;
+
   // Manual-control state (digital pipeline in the web backend).
   double _iso = 100;
   double _ev = 0;
@@ -69,6 +72,40 @@ class _WebCameraPageState extends State<WebCameraPage> {
     // in-memory capture path can be demonstrated without a manual click.
     if (Uri.base.queryParameters['capture'] == '1') {
       Timer(const Duration(seconds: 3), _capture);
+    }
+    // `?rec=N` records for N seconds, then stops (demonstrates MediaRecorder).
+    final rec = int.tryParse(Uri.base.queryParameters['rec'] ?? '');
+    if (rec != null && rec > 0) {
+      Timer(const Duration(seconds: 2), () async {
+        await _toggleRecord();
+        Timer(Duration(seconds: rec), _toggleRecord);
+      });
+    }
+  }
+
+  Future<void> _toggleRecord() async {
+    final controller = _controller;
+    if (controller == null) return;
+    try {
+      if (_recording) {
+        final v = await controller.stopVideoRecording();
+        setState(() {
+          _recording = false;
+          _recResult = 'Recorded ${v.duration.inSeconds}s · '
+              '${v.fileSizeBytes} bytes · ${v.codec.name} → ${v.resolution.width}×${v.resolution.height}';
+        });
+      } else {
+        await controller.startVideoRecording('web');
+        setState(() {
+          _recording = true;
+          _recResult = null;
+        });
+      }
+    } on Object catch (e) {
+      setState(() {
+        _recording = false;
+        _error = '$e';
+      });
     }
   }
 
@@ -248,6 +285,21 @@ class _WebCameraPageState extends State<WebCameraPage> {
                         ]
                       : <Widget>[
                           _previewArea(),
+                          if (_recResult != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Card(
+                                color: Colors.green.shade900,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(10),
+                                  child: Row(children: <Widget>[
+                                    const Icon(Icons.videocam, size: 18),
+                                    const SizedBox(width: 8),
+                                    Expanded(child: Text(_recResult!)),
+                                  ]),
+                                ),
+                              ),
+                            ),
                           const SizedBox(height: 10),
                           _overlayChips(),
                           const SizedBox(height: 10),
@@ -265,10 +317,26 @@ class _WebCameraPageState extends State<WebCameraPage> {
       ),
       floatingActionButton: controller == null
           ? null
-          : FloatingActionButton.extended(
-              onPressed: _capture,
-              icon: const Icon(Icons.camera),
-              label: const Text('Capture'),
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                FloatingActionButton.extended(
+                  heroTag: 'rec',
+                  backgroundColor: _recording ? Colors.red : null,
+                  onPressed: _toggleRecord,
+                  icon: Icon(_recording
+                      ? Icons.stop
+                      : Icons.fiber_manual_record),
+                  label: Text(_recording ? 'Stop' : 'Record'),
+                ),
+                const SizedBox(width: 12),
+                FloatingActionButton.extended(
+                  heroTag: 'cap',
+                  onPressed: _capture,
+                  icon: const Icon(Icons.camera),
+                  label: const Text('Capture'),
+                ),
+              ],
             ),
     );
   }

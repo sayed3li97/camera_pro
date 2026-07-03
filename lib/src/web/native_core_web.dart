@@ -13,7 +13,8 @@ import '../processing/histogram.dart';
 import '../processing/waveform.dart';
 
 int _luma(int r, int g, int b) => (77 * r + 150 * g + 29 * b) >> 8;
-int _clamp(int v) => v < 0 ? 0 : (v > 255 ? 255 : v);
+// Matches the C clampf_u8: clamp to [0,255] then round-to-nearest.
+int _clampRound(double v) => v < 0 ? 0 : (v > 255 ? 255 : (v + 0.5).toInt());
 
 /// Pure-Dart drop-in for the FFI `NativeCore` (web target).
 class NativeCore {
@@ -242,10 +243,10 @@ class NativeCore {
         }
         ch[ri] *= rGain; // white balance
         ch[bi] *= bGain;
-        // Truncating clamp, matching the C clampf_u8.
-        px[i] = _clamp(ch[0].toInt());
-        px[i + 1] = _clamp(ch[1].toInt());
-        px[i + 2] = _clamp(ch[2].toInt());
+        // Round-to-nearest clamp, matching the C clampf_u8 (v + 0.5f).
+        px[i] = _clampRound(ch[0]);
+        px[i + 1] = _clampRound(ch[1]);
+        px[i + 2] = _clampRound(ch[2]);
       }
     }
   }

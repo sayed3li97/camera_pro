@@ -94,6 +94,14 @@ void main() {
       expect(down[0], 60); // 100 - 40
     });
 
+    test('adjustPixels rounds to nearest like the C clampf_u8', () {
+      const w = 2, h = 2;
+      // R=101, gain=1.5 → 151.5 → rounds to 152 (truncation would give 151).
+      final px = _solid(w, h, 101, 101, 101);
+      NativeCore.adjustPixels(px, width: w, height: h, isBgra: false, gain: 1.5);
+      expect(px[0], 152);
+    });
+
     test('digitalZoom center-crops (edges pull toward the center)', () {
       const w = 8, h = 8;
       // Distinct corners; a 2x crop should replace the corner with center color.
