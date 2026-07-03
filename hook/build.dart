@@ -20,6 +20,10 @@ import 'package:native_toolchain_c/native_toolchain_c.dart';
 
 void main(List<String> args) async {
   await build(args, (input, output) async {
+    // Web (and any target that doesn't request code assets) has no C core —
+    // the pure-Dart NativeCore is used there. Nothing to compile.
+    if (!input.config.buildCodeAssets) return;
+
     final targetOS = input.config.code.targetOS;
     final isApple = targetOS == OS.macOS || targetOS == OS.iOS;
 

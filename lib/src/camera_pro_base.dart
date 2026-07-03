@@ -1,20 +1,11 @@
 /// Top-level entrypoint for the camera_pro API.
 library;
 
-import 'dart:io' show Platform;
-
 import 'controller/camera_backend.dart';
 import 'controller/camera_pro_controller.dart';
-import 'ffi/native_core.dart';
+import 'core_facade.dart';
 import 'models/camera_device.dart';
-import 'platform/apple/apple_camera_backend.dart';
-
-/// Picks the native backend for the current platform, falling back to the stub
-/// where no HAL is wired yet.
-CameraBackend _defaultBackend() {
-  if (Platform.isMacOS || Platform.isIOS) return AppleCameraBackend();
-  return StubCameraBackend();
-}
+import 'platform/default_backend.dart';
 
 /// The entrypoint for creating and querying cameras.
 ///
@@ -37,7 +28,7 @@ class CameraPro {
   /// Pass a [backend] to target a specific platform HAL; defaults to the stub
   /// backend until the native HAL for the current platform is wired.
   static Future<CameraList> availableCameras({CameraBackend? backend}) {
-    final b = backend ?? _defaultBackend();
+    final b = backend ?? defaultCameraBackend();
     return b.enumerateDevices();
   }
 
@@ -47,7 +38,7 @@ class CameraPro {
     CameraDevice? device,
   }) =>
       CameraProController.create(
-        backend: backend ?? _defaultBackend(),
+        backend: backend ?? defaultCameraBackend(),
         device: device,
       );
 }

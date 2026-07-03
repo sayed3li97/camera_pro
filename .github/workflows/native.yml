@@ -89,3 +89,27 @@ jobs:
       - name: Build and run core tests (stub backend)
         shell: cmd
         run: cl /nologo /W4 /O2 /std:c11 /experimental:c11atomics /I src\core /I src\hal src\core\*.c src\platform\stub\camera_hal_stub.c src\tests\core_test.c /Fe:core_test.exe && core_test.exe
+
+  # Web backend: the package compiles for the browser (conditional imports keep
+  # dart:ffi/dart:io off the web tree), the pure-Dart visual-aid kernels run in
+  # a real browser JS VM, and the web sample app builds.
+  web:
+    runs-on: ubuntu-latest
+    env:
+      CHROME_EXECUTABLE: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Pub get
+        run: flutter pub get
+      - name: Analyze (package)
+        run: flutter analyze lib
+      - name: Web-safe unit + kernel tests (headless Chrome)
+        run: flutter test --platform chrome test/controller test/models test/platform test/processing test/web
+      - name: Build web sample app
+        run: |
+          cd example
+          flutter pub get
+          flutter build web -t lib/web_main.dart --no-tree-shake-icons

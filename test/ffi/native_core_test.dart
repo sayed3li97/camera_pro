@@ -2,6 +2,9 @@
 // by hook/build.dart. They run under `flutter test` because native assets are
 // built for the host. If the native asset isn't available (e.g. a platform
 // where the hook didn't run), the whole group is skipped rather than failing.
+@TestOn('vm') // uses dart:ffi — never runs in the browser
+library;
+
 import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:typed_data';

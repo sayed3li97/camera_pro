@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Web support (getUserMedia backend + pure-Dart visual aids)**
+
+- **Conditional-import refactor**: `camera_pro.dart` now selects native (FFI) or
+  web implementations via `if (dart.library.js_interop)` exports, so the web
+  build never references `dart:ffi`/`dart:io`. New `platform_io.dart` /
+  `platform_web.dart` aggregators, `core_facade.dart`, and a
+  `default_backend.dart` factory. The native-assets hook skips C compilation
+  when `buildCodeAssets` is false (web).
+- **`WebCameraBackend`** (`package:web`): device enumeration, `getUserMedia`
+  preview via `<video>`→`<canvas>` pixel readback, capabilities from
+  `MediaStreamTrack.getCapabilities()` (zoom where exposed; manual controls
+  honestly reported NotSupported), `applyConstraints` zoom, and in-memory
+  `capturePhoto`.
+- **Pure-Dart visual aids** (`native_core_web.dart`): histogram, focus peaking,
+  zebra, false color, waveform, and digital adjust reimplemented in Dart —
+  byte-identical to the C reference (cross-checked: the web-kernel test passes
+  on both the browser and the FFI VM).
+- **Web sample app** (`example/lib/web_main.dart`): live preview, capability
+  passport, toggle-able overlays, in-memory capture; `?overlay=`/`?capture=`
+  URL params for reproducible demos.
+- **Verified**: builds with `flutter build web`; runs in Chrome against a fake
+  camera device (live preview + all overlays + capture, screenshots in
+  `doc/web/`); `flutter test --platform chrome` passes 60 tests in the browser.
+  New CI `web` job builds the app and runs the browser tests every push.
+
 **Roadmap completion sweep (pro capture, GPU, SIMD, platforms, polish)**
 
 - **Video recording**: `AVCaptureMovieFileOutput` wired through HAL → backend → controller (`startVideoRecording`/`stopVideoRecording`, blocking finalize). ffprobe-verified h264 `.mov`.

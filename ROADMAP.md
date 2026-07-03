@@ -84,7 +84,7 @@ unverifiable device code).
 |------|--------|
 | Linux backend (V4L2, full 44-function contract) | ✅ compiles + lifecycle harness passes on CI ubuntu runner · ⛔ camera-hardware runtime untested |
 | Windows backend (Media Foundation, full contract) | ✅ compiles + lifecycle harness passes on CI windows runner · ⛔ camera-hardware runtime untested |
-| Web backend | ❌ — requires a conditional-import refactor (the package currently imports `dart:ffi`/`dart:io` unconditionally) plus a `package:web` getUserMedia backend and WebGPU ports. Plan: split `camera_pro.dart` exports behind `if (dart.library.js_interop)`, stub `NativeCore`, implement `WebCameraBackend` |
+| Web backend | ✅ — conditional-import refactor done (`dart:ffi`/`dart:io` kept off the web tree via `if (dart.library.js_interop)` exports); `WebCameraBackend` on `package:web` getUserMedia; visual aids reimplemented in pure Dart (bit-identical to the C core, cross-checked). Builds and runs in the browser; browser tests + web-app build gated in CI. WebGPU compute path remains future work |
 
 ## Phase 8 — Polish & Publication ✅ (complete)
 
@@ -107,5 +107,5 @@ unverifiable device code).
 | Android backend | Android device/emulator |
 | Linux/Windows camera runtime validation | machines with cameras (CI validates compile + lifecycle) |
 | Streaming transport | RTMP/SRT client implementation + an endpoint to verify against |
-| Web | conditional-import refactor (plan above) |
+| Web WebGPU compute path | pure engineering — CPU pure-Dart kernels ship today; WebGPU is an optimization |
 | HDR fusion, HEVC/ProRes selection, texture-based preview, ffigen swap | pure engineering time — no hardware gate |

@@ -6,7 +6,7 @@ A Flutter camera package built on a shared C/C++ core with a crash-proof Dart AP
 
 > **Project status: working camera engine (v0.1.0, pre-release)**
 >
-> On macOS the example app opens the real camera and does live preview, all six manual controls, five live visual-aid overlays (histogram, focus peaking, zebra, false color, waveform — GPU-accelerated via Metal where available), PNG + RAW/DNG capture with EXIF, burst, EV bracketing, and H.264 video recording — every one of those verified live against real hardware. The same AVFoundation backend compiles for iOS with sensor-level manual controls. Linux (V4L2) and Windows (Media Foundation) backends implement the full HAL contract and pass CI on real ubuntu/windows runners (camera-hardware runtime pending machines with cameras). Android and Web are not started — see [ROADMAP.md](ROADMAP.md) for the honest gate on every remaining item.
+> On macOS the example app opens the real camera and does live preview, all six manual controls, five live visual-aid overlays (histogram, focus peaking, zebra, false color, waveform — GPU-accelerated via Metal where available), PNG + RAW/DNG capture with EXIF, burst, EV bracketing, and H.264 video recording — every one of those verified live against real hardware. The same AVFoundation backend compiles for iOS with sensor-level manual controls. **Web** runs in the browser too: a getUserMedia backend with live preview, capture, and the visual aids reimplemented in pure Dart — verified in Chrome with screenshots ([see below](#web)). Linux (V4L2) and Windows (Media Foundation) backends implement the full HAL contract and pass CI on real ubuntu/windows runners (camera-hardware runtime pending machines with cameras). Android is not started — see [ROADMAP.md](ROADMAP.md) for the honest gate on every remaining item.
 
 ---
 
@@ -46,7 +46,7 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | Apple AVFoundation HAL (iOS/macOS) | ✅ | Enumeration, capabilities, manual controls, live preview, photo/RAW capture, video recording |
 | Windows Media Foundation HAL | ✅ CI | Full 44-fn contract; compiles + lifecycle harness runs on windows-latest |
 | Linux V4L2 HAL | ✅ CI | Full contract incl. mmap streaming; compiles + runs on ubuntu-latest |
-| Web (getUserMedia) HAL | ❌ | Needs conditional-import refactor (plan in ROADMAP.md) |
+| Web (getUserMedia) HAL | ✅ | `WebCameraBackend` — MediaDevices preview, capture, capabilities; visual aids in pure Dart. Runs in the browser (screenshots below) |
 | Flutter texture registration | 🚧 | API surface designed; not connected |
 
 ### Manual controls
@@ -124,7 +124,7 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | macOS | ✅ preview + manual | ✅ | Live preview streaming on real cameras; full manual control set (ISO/shutter/exposure/WB/focus/zoom) via the digital pipeline since the built-in camera exposes no sensor controls → `CameraTier.full` |
 | Windows | ✅ CI | ✅ | Media Foundation backend (full 44-fn contract) compiles + lifecycle harness runs on CI; camera runtime ⛔ needs hardware |
 | Linux | ✅ CI | ✅ | V4L2 backend (full contract, mmap streaming) compiles + lifecycle harness runs on CI; camera runtime ⛔ needs hardware |
-| Web | 🚧 | ✅ (scalar only) | getUserMedia HAL designed; SIMD requires WASM target |
+| Web | ✅ | ✅ (pure Dart) | getUserMedia backend + pure-Dart visual aids; builds and runs in the browser, browser tests pass in CI |
 
 All platforms get the C core and stub backend today. Platform camera access requires the corresponding HAL implementation.
 
@@ -212,9 +212,10 @@ The following results were produced on macOS arm64 with Flutter 3.44.1 / Dart 3.
 |---|---|
 | C core (`clang -std=c11 -O2 -Wall -Wextra -Werror`) | **60/60 checks pass** (arm64 NEON) |
 | Same harness compiled x86_64, run under **Rosetta 2** | **60/60** — SSSE3 histogram bit-exact vs scalar |
-| Dart unit + FFI tests (`flutter test`) | **71/71 pass** |
+| Dart unit + FFI tests (`flutter test`, VM) | **75/75 pass** |
+| Dart tests **in the browser** (`flutter test --platform chrome`) | **60/60 pass** (unit + web visual-aid kernels, compiled to JS) |
 | `flutter analyze` (package + example) | **No issues** |
-| GitHub Actions CI (`native.yml`) | **Green**: macos-14, ubuntu (gcc `-Werror` V4L2 + `-mssse3` core), windows (MSVC /W4 Media Foundation) — backends compile and the lifecycle harness runs on all three |
+| GitHub Actions CI (`native.yml`) | **Green**: macos-14, ubuntu (gcc `-Werror` V4L2 + `-mssse3` core), windows (MSVC /W4 Media Foundation), **web** (browser tests + web-app build) |
 | Metal GPU cross-check (`metal_test.c`, Apple M1 Pro) | Histogram + zebra **bit-exact** vs C kernels; peaking within 0.005% |
 | Live camera preview (example app, real Mac camera) | **Streaming** |
 | Video recording (`.mov`) | **ffprobe-verified**: h264, 640×480, ~30fps, 34s, 14.7MB |
@@ -222,7 +223,38 @@ The following results were produced on macOS arm64 with Flutter 3.44.1 / Dart 3.
 | Burst capture | **5 PNGs in ~1.2s** from one click |
 | EV bracket (−2/0/+2) | **Measured** mean luminance 25.8 / 96.9 / 183.4 |
 | Multi-camera | Two backends opened **different physical cameras** concurrently |
+| Web sample app in Chrome (getUserMedia) | **Live streaming** — 1000+ frames, all visual aids, capture ([screenshots](#web)) |
 | dartdoc / `dart pub publish --dry-run` | **0 warnings** each |
+
+## Web
+
+The package compiles for the browser: a conditional-import split keeps `dart:ffi`
+and `dart:io` off the web tree, `WebCameraBackend` drives the camera via
+`navigator.mediaDevices.getUserMedia`, and the visual-aid kernels
+(histogram / focus peaking / zebra / false color / waveform) are reimplemented
+in pure Dart — the same algorithms as the C core, cross-checked to produce
+identical output.
+
+```bash
+cd example
+flutter run -d chrome -t lib/web_main.dart
+```
+
+Verified in Chrome against a synthetic camera device
+(`--use-fake-device-for-media-stream`, which renders a spinning ball + timestamp):
+
+| | |
+|---|---|
+| **Live preview + histogram** — getUserMedia stream, live RGB/luma histogram overlay | ![live](doc/web/web_01_live.png) |
+| **False color** — pure-Dart exposure-zone map | ![false color](doc/web/web_02_falsecolor.png) |
+| **Focus peaking** — pure-Dart Sobel edge highlight | ![peaking](doc/web/web_03_peaking.png) |
+| **Waveform** — pure-Dart luma waveform monitor | ![waveform](doc/web/web_04_waveform.png) |
+| **Capture** — `capturePhoto()` still held in memory (thumbnail, lower-right) | ![capture](doc/web/web_06_capture.png) |
+
+The status card reports **Platform: Web, MediaDevices** and **Kernels: dart**, and
+manual controls are honestly surfaced as *NotSupported* ("Not exposed by
+MediaStreamTrack on this camera") — the capability passport working exactly as on
+native.
 
 ## Measured performance
 
