@@ -46,6 +46,13 @@ class _WebCameraPageState extends State<WebCameraPage> {
   String _overlay = 'none'; // none | peaking | zebra | falsecolor | waveform
   WaveformData? _wf;
 
+  // Manual-control state (digital pipeline in the web backend).
+  double _iso = 100;
+  double _ev = 0;
+  double _wb = 5500;
+  double _zoomVal = 1;
+  double _focus = 0.5;
+
   @override
   void initState() {
     super.initState();
@@ -71,10 +78,50 @@ class _WebCameraPageState extends State<WebCameraPage> {
       if (!mounted) return;
       setState(() => _controller = controller);
       await controller.startPreviewStream();
+      await _applyUrlControls(controller);
       _timer = Timer.periodic(const Duration(milliseconds: 40), (_) => _pump());
     } on Object catch (e) {
       setState(() => _error = '$e');
     }
+  }
+
+  /// Applies initial manual-control values from URL params (deterministic
+  /// screenshots), e.g. `?ev=2`, `?wb=2800`, `?zoom=3`, `?iso=800`, `?focus=0`.
+  Future<void> _applyUrlControls(CameraProController c) async {
+    final p = Uri.base.queryParameters;
+    double? num(String k) => p[k] == null ? null : double.tryParse(p[k]!);
+    final iso = num('iso'), ev = num('ev'), wb = num('wb');
+    final zoom = num('zoom'), focus = num('focus');
+    if (iso != null) await _setIso(c, iso);
+    if (ev != null) await _setEv(c, ev);
+    if (wb != null) await _setWb(c, wb);
+    if (zoom != null) await _setZoom(c, zoom);
+    if (focus != null) await _setFocus(c, focus);
+  }
+
+  Future<void> _setIso(CameraProController c, double v) async {
+    _iso = v;
+    await c.setIso(Iso(v.round()));
+  }
+
+  Future<void> _setEv(CameraProController c, double v) async {
+    _ev = v;
+    await c.setExposureCompensation(Ev(v));
+  }
+
+  Future<void> _setWb(CameraProController c, double v) async {
+    _wb = v;
+    await c.setWhiteBalance(WhiteBalance.temperature(v.round()));
+  }
+
+  Future<void> _setZoom(CameraProController c, double v) async {
+    _zoomVal = v;
+    await c.setZoom(v);
+  }
+
+  Future<void> _setFocus(CameraProController c, double v) async {
+    _focus = v;
+    await c.setFocusDistance(v);
   }
 
   void _pump() {
@@ -166,7 +213,23 @@ class _WebCameraPageState extends State<WebCameraPage> {
   Widget build(BuildContext context) {
     final controller = _controller;
     return Scaffold(
-      appBar: AppBar(title: const Text('camera_pro · web')),
+      appBar: AppBar(
+        title: const Text('camera_pro · web'),
+        actions: <Widget>[
+          if (controller != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Center(
+                child: Chip(
+                  backgroundColor: controller.tier == CameraTier.full
+                      ? Colors.green.shade700
+                      : null,
+                  label: Text('Tier: ${controller.tier.label}'),
+                ),
+              ),
+            ),
+        ],
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
@@ -174,18 +237,29 @@ class _WebCameraPageState extends State<WebCameraPage> {
               ? _loading()
               : ListView(
                   padding: const EdgeInsets.all(16),
-                  children: <Widget>[
-                    _previewArea(),
-                    const SizedBox(height: 10),
-                    _overlayChips(),
-                    const SizedBox(height: 10),
-                    _infoCard(controller),
-                    const SizedBox(height: 10),
-                    const Text('Capabilities',
-                        style:
-                            TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                    ..._capRows(controller.capabilities),
-                  ],
+                  children: Uri.base.queryParameters['view'] == 'caps'
+                      ? <Widget>[
+                          _infoCard(controller),
+                          const SizedBox(height: 10),
+                          const Text('Capabilities',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 18)),
+                          ..._capRows(controller.capabilities),
+                        ]
+                      : <Widget>[
+                          _previewArea(),
+                          const SizedBox(height: 10),
+                          _overlayChips(),
+                          const SizedBox(height: 10),
+                          _controlsPanel(controller),
+                          const SizedBox(height: 10),
+                          _infoCard(controller),
+                          const SizedBox(height: 10),
+                          const Text('Capabilities',
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 18)),
+                          ..._capRows(controller.capabilities),
+                        ],
                 ),
         ),
       ),
@@ -296,6 +370,70 @@ class _WebCameraPageState extends State<WebCameraPage> {
     ]);
   }
 
+  Widget _controlsPanel(CameraProController c) {
+    Widget slider(
+      String label,
+      double value,
+      double min,
+      double max,
+      String display,
+      Future<void> Function(double) onChanged,
+    ) {
+      return Row(
+        children: <Widget>[
+          SizedBox(
+              width: 92,
+              child: Text(label, style: const TextStyle(fontSize: 13))),
+          Expanded(
+            child: Slider(
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              onChanged: (v) {
+                onChanged(v);
+                setState(() {});
+              },
+            ),
+          ),
+          SizedBox(
+              width: 64,
+              child: Text(display,
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                      fontSize: 12, fontFeatures: <ui.FontFeature>[
+                    ui.FontFeature.tabularFigures()
+                  ]))),
+        ],
+      );
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Padding(
+              padding: EdgeInsets.only(left: 4, bottom: 2),
+              child: Text('Manual controls (digital pipeline)',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            slider('ISO', _iso, 50, 1600, _iso.round().toString(),
+                (v) => _setIso(c, v)),
+            slider('Exposure', _ev, -3, 3, '${_ev >= 0 ? '+' : ''}${_ev.toStringAsFixed(1)} EV',
+                (v) => _setEv(c, v)),
+            slider('White bal.', _wb, 2500, 10000, '${_wb.round()}K',
+                (v) => _setWb(c, v)),
+            slider('Zoom', _zoomVal, 1, 4, '${_zoomVal.toStringAsFixed(1)}×',
+                (v) => _setZoom(c, v)),
+            slider('Focus', _focus, 0, 1, _focus.toStringAsFixed(2),
+                (v) => _setFocus(c, v)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _infoCard(CameraProController c) {
     final caps = c.capabilities;
     return Card(
@@ -335,8 +473,11 @@ class _WebCameraPageState extends State<WebCameraPage> {
     return <Widget>[
       row('Manual ISO', caps.iso),
       row('Shutter speed', caps.shutterSpeed),
-      row('White balance', caps.whiteBalanceKelvin),
+      row('Exposure comp.', caps.exposureCompensation),
+      row('White balance (K)', caps.whiteBalanceKelvin),
+      row('Manual focus', caps.focusDistance),
       row('Zoom', caps.zoom),
+      row('Aperture', caps.aperture),
     ];
   }
 }

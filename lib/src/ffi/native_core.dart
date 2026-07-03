@@ -175,6 +175,71 @@ class NativeCore {
       pkg_ffi.malloc.free(out);
     }
   }
+
+  /// Digital manual-control adjustment (in place): contrast, ISO/shutter [gain],
+  /// additive EV [bias], and white-balance [temp]. Mirrors the web NativeCore.
+  static void adjustPixels(
+    Uint8List px, {
+    required int width,
+    required int height,
+    bool isBgra = true,
+    double gain = 1.0,
+    double bias = 0.0,
+    double temp = 0.0,
+    double contrast = 1.0,
+    int stride = 0,
+  }) {
+    final s = stride == 0 ? width * 4 : stride;
+    final buf = pkg_ffi.malloc<ffi.Uint8>(px.length);
+    try {
+      buf.asTypedList(px.length).setAll(0, px);
+      bindings.camera_pro_adjust_pixels(
+          buf, width, height, s, isBgra ? 1 : 0, gain, bias, temp, contrast);
+      px.setAll(0, buf.asTypedList(px.length));
+    } finally {
+      pkg_ffi.malloc.free(buf);
+    }
+  }
+
+  /// Center crop-zoom by [factor] (>= 1.0). Returns a new RGBA buffer.
+  static Uint8List digitalZoom(
+    Uint8List src, {
+    required int width,
+    required int height,
+    double factor = 1.0,
+    int stride = 0,
+  }) {
+    final s = stride == 0 ? width * 4 : stride;
+    final inp = pkg_ffi.malloc<ffi.Uint8>(src.length);
+    final out = pkg_ffi.malloc<ffi.Uint8>(width * height * 4);
+    try {
+      inp.asTypedList(src.length).setAll(0, src);
+      bindings.camera_pro_digital_zoom(inp, out, width, height, s, factor);
+      return Uint8List.fromList(out.asTypedList(width * height * 4));
+    } finally {
+      pkg_ffi.malloc.free(inp);
+      pkg_ffi.malloc.free(out);
+    }
+  }
+
+  /// Separable box blur (in place) — a digital "defocus" for manual focus.
+  static void boxBlur(
+    Uint8List px, {
+    required int width,
+    required int height,
+    required int radius,
+    int stride = 0,
+  }) {
+    final s = stride == 0 ? width * 4 : stride;
+    final buf = pkg_ffi.malloc<ffi.Uint8>(px.length);
+    try {
+      buf.asTypedList(px.length).setAll(0, px);
+      bindings.camera_pro_box_blur(buf, width, height, s, radius);
+      px.setAll(0, buf.asTypedList(px.length));
+    } finally {
+      pkg_ffi.malloc.free(buf);
+    }
+  }
 }
 
 /// A managed handle to a native ring buffer pool.

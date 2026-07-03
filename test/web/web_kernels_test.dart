@@ -7,6 +7,8 @@
 import 'dart:typed_data';
 
 import 'package:camera_pro/camera_pro.dart';
+// ignore: implementation_imports
+import 'package:camera_pro/src/web/web_dng.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Uint8List _solid(int w, int h, int r, int g, int b) {
@@ -79,6 +81,58 @@ void main() {
       for (var i = 0; i < w * h; i++) {
         expect(dark[i * 4], 10, reason: 'dark pixels untouched');
       }
+    });
+
+    test('adjustPixels brightens with gain and darkens with negative bias', () {
+      const w = 4, h = 4;
+      final base = _solid(w, h, 100, 100, 100);
+      final up = Uint8List.fromList(base);
+      NativeCore.adjustPixels(up, width: w, height: h, isBgra: false, gain: 2.0);
+      expect(up[0], 200); // 100 * 2.0
+      final down = Uint8List.fromList(base);
+      NativeCore.adjustPixels(down, width: w, height: h, isBgra: false, bias: -40);
+      expect(down[0], 60); // 100 - 40
+    });
+
+    test('digitalZoom center-crops (edges pull toward the center)', () {
+      const w = 8, h = 8;
+      // Distinct corners; a 2x crop should replace the corner with center color.
+      final px = _solid(w, h, 10, 20, 30);
+      px[0] = 200; // top-left R marker (outside the 2x central crop)
+      final out =
+          NativeCore.digitalZoom(px, width: w, height: h, factor: 2.0);
+      expect(out[0], isNot(200), reason: 'corner cropped away by 2x zoom');
+    });
+
+    test('boxBlur spreads a single bright pixel to neighbors', () {
+      const w = 8, h = 8;
+      final px = Uint8List(w * h * 4);
+      for (var i = 0; i < w * h; i++) {
+        px[i * 4 + 3] = 255;
+      }
+      final c = ((h ~/ 2) * w + w ~/ 2) * 4;
+      px[c] = px[c + 1] = px[c + 2] = 255; // one white pixel
+      NativeCore.boxBlur(px, width: w, height: h, radius: 2);
+      // A neighbor that was black must now be non-zero.
+      final n = ((h ~/ 2) * w + w ~/ 2 + 1) * 4;
+      expect(px[n], greaterThan(0));
+    });
+
+    test('encodeLinearDng emits a valid little-endian TIFF/DNG', () {
+      const w = 8, h = 6;
+      final dng = encodeLinearDng(
+        rgba: _solid(w, h, 200, 100, 50),
+        width: w,
+        height: h,
+        isBgra: false,
+        iso: 400,
+        exposureNs: 16666667,
+      );
+      expect(dng[0], 0x49); // 'I'
+      expect(dng[1], 0x49); // 'I'
+      expect(dng[2], 42); // TIFF magic
+      // header + IFDs + values + w*h*3 pixels.
+      expect(dng.length, greaterThan(w * h * 3));
     });
 
     test('focus peaking marks a hard edge and reports the SIMD name', () {

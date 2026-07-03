@@ -209,7 +209,8 @@ class NativeCore {
   }
 
   /// Digital manual-control adjustment (in place), mirroring
-  /// `camera_pro_adjust_pixels`.
+  /// `camera_pro_adjust_pixels`: contrast about mid-grey, then ISO/shutter
+  /// [gain] and additive EV [bias], then a white-balance channel tilt [temp].
   static void adjustPixels(
     Uint8List px, {
     required int width,
@@ -224,22 +225,123 @@ class NativeCore {
     final s = stride == 0 ? width * 4 : stride;
     final ri = isBgra ? 2 : 0;
     final bi = isBgra ? 0 : 2;
-    final rGain = 1.0 + temp * 0.6;
-    final bGain = 1.0 - temp * 0.6;
+    final rGain = 1.0 + temp * 0.6; // warm boosts red
+    final bGain = 1.0 - temp * 0.6; // ...and cuts blue
     for (var y = 0; y < height; y++) {
       var i = y * s;
       for (var x = 0; x < width; x++, i += 4) {
-        final ch = <double>[px[i].toDouble(), px[i + 1].toDouble(), px[i + 2].toDouble()];
+        final ch = <double>[
+          px[i].toDouble(),
+          px[i + 1].toDouble(),
+          px[i + 2].toDouble(),
+        ];
         for (var c = 0; c < 3; c++) {
-          var v = (ch[c] - 128.0) * contrast + 128.0;
-          v = v * gain + bias;
+          var v = (ch[c] - 128.0) * contrast + 128.0; // contrast
+          v = v * gain + bias; // ISO/shutter + EV
           ch[c] = v;
         }
-        ch[ri == 2 ? 2 : 0] *= rGain;
-        ch[bi == 2 ? 2 : 0] *= bGain;
-        px[i] = _clamp((ch[0] + 0.5).toInt());
-        px[i + 1] = _clamp((ch[1] + 0.5).toInt());
-        px[i + 2] = _clamp((ch[2] + 0.5).toInt());
+        ch[ri] *= rGain; // white balance
+        ch[bi] *= bGain;
+        // Truncating clamp, matching the C clampf_u8.
+        px[i] = _clamp(ch[0].toInt());
+        px[i + 1] = _clamp(ch[1].toInt());
+        px[i + 2] = _clamp(ch[2].toInt());
+      }
+    }
+  }
+
+  /// Center crop-zoom by [factor] (>= 1.0), mirroring `camera_pro_digital_zoom`.
+  /// Returns a new RGBA buffer of the same dimensions.
+  static Uint8List digitalZoom(
+    Uint8List src, {
+    required int width,
+    required int height,
+    double factor = 1.0,
+    int stride = 0,
+  }) {
+    final s = stride == 0 ? width * 4 : stride;
+    if (factor < 1.0) factor = 1.0;
+    final out = Uint8List(width * height * 4);
+    final cropW = (width / factor).toInt();
+    final cropH = (height / factor).toInt();
+    final offX = (width - cropW) ~/ 2;
+    final offY = (height - cropH) ~/ 2;
+    final outStride = width * 4;
+    for (var y = 0; y < height; y++) {
+      final sy = offY + (y * cropH) ~/ height;
+      final srow = sy * s;
+      final orow = y * outStride;
+      for (var x = 0; x < width; x++) {
+        final sx = offX + (x * cropW) ~/ width;
+        final sp = srow + sx * 4;
+        final op = orow + x * 4;
+        out[op] = src[sp];
+        out[op + 1] = src[sp + 1];
+        out[op + 2] = src[sp + 2];
+        out[op + 3] = src[sp + 3];
+      }
+    }
+    return out;
+  }
+
+  /// Separable box blur (in place), mirroring `camera_pro_box_blur` — used as a
+  /// digital "defocus" for manual focus.
+  static void boxBlur(
+    Uint8List px, {
+    required int width,
+    required int height,
+    required int radius,
+    int stride = 0,
+  }) {
+    if (radius <= 0) return;
+    final s = stride == 0 ? width * 4 : stride;
+    final tstride = width * 4;
+    final tmp = Uint8List(width * height * 4);
+    // Horizontal pass: px -> tmp.
+    for (var y = 0; y < height; y++) {
+      final srow = y * s;
+      final trow = y * tstride;
+      for (var x = 0; x < width; x++) {
+        var x0 = x - radius, x1 = x + radius;
+        if (x0 < 0) x0 = 0;
+        if (x1 >= width) x1 = width - 1;
+        final count = x1 - x0 + 1;
+        var s0 = 0, s1 = 0, s2 = 0, s3 = 0;
+        for (var xx = x0; xx <= x1; xx++) {
+          final p = srow + xx * 4;
+          s0 += px[p];
+          s1 += px[p + 1];
+          s2 += px[p + 2];
+          s3 += px[p + 3];
+        }
+        final t = trow + x * 4;
+        tmp[t] = s0 ~/ count;
+        tmp[t + 1] = s1 ~/ count;
+        tmp[t + 2] = s2 ~/ count;
+        tmp[t + 3] = s3 ~/ count;
+      }
+    }
+    // Vertical pass: tmp -> px.
+    for (var y = 0; y < height; y++) {
+      var y0 = y - radius, y1 = y + radius;
+      if (y0 < 0) y0 = 0;
+      if (y1 >= height) y1 = height - 1;
+      final count = y1 - y0 + 1;
+      final drow = y * s;
+      for (var x = 0; x < width; x++) {
+        var s0 = 0, s1 = 0, s2 = 0, s3 = 0;
+        for (var yy = y0; yy <= y1; yy++) {
+          final p = yy * tstride + x * 4;
+          s0 += tmp[p];
+          s1 += tmp[p + 1];
+          s2 += tmp[p + 2];
+          s3 += tmp[p + 3];
+        }
+        final d = drow + x * 4;
+        px[d] = s0 ~/ count;
+        px[d + 1] = s1 ~/ count;
+        px[d + 2] = s2 ~/ count;
+        px[d + 3] = s3 ~/ count;
       }
     }
   }

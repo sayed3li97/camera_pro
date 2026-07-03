@@ -84,7 +84,7 @@ unverifiable device code).
 |------|--------|
 | Linux backend (V4L2, full 44-function contract) | ✅ compiles + lifecycle harness passes on CI ubuntu runner · ⛔ camera-hardware runtime untested |
 | Windows backend (Media Foundation, full contract) | ✅ compiles + lifecycle harness passes on CI windows runner · ⛔ camera-hardware runtime untested |
-| Web backend | ✅ — conditional-import refactor done (`dart:ffi`/`dart:io` kept off the web tree via `if (dart.library.js_interop)` exports); `WebCameraBackend` on `package:web` getUserMedia; visual aids reimplemented in pure Dart (bit-identical to the C core, cross-checked). Builds and runs in the browser; browser tests + web-app build gated in CI. WebGPU compute path remains future work |
+| Web backend | ✅ — conditional-import refactor done (`dart:ffi`/`dart:io` kept off the web tree via `if (dart.library.js_interop)` exports); `WebCameraBackend` on `package:web` getUserMedia. **Full manual controls** (ISO/shutter/EV/WB/focus/zoom) via the pure-Dart digital pipeline → reaches `CameraTier.full`; visual aids + linear-DNG RAW reimplemented in pure Dart (cross-checked byte-for-byte against the C core). Builds and runs in the browser; browser tests + web-app build gated in CI. WebGPU compute path remains future work |
 
 ## Phase 8 — Polish & Publication ✅ (complete)
 

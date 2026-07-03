@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**Full manual controls on every platform (web reaches the DSLR tier)**
+
+- The web backend now applies all six manual controls — ISO, shutter, exposure,
+  white balance, focus, zoom — through a **pure-Dart digital pipeline**
+  (`NativeCore.adjustPixels` / `digitalZoom` / `boxBlur`, ports of the C
+  kernels), exactly as the macOS built-in camera does. Every control is
+  reported `Supported`, so a browser camera reaches `CameraTier.full` ("Full
+  manual (DSLR)"). Aperture is the one honest exception (fixed-aperture lens).
+- `NativeCore` gains `adjustPixels` / `digitalZoom` / `boxBlur` on native (FFI)
+  too, so the manual-control API is identical across platforms.
+- Web RAW capture is real: a pure-Dart linear-DNG encoder (`web_dng.dart`, a
+  port of `dng_writer.c`) — ffmpeg decodes the output (20 direntries, matches
+  the C writer). `supportsRawCapture` is now honestly true on web.
+- `supportsBurstMode` / `supportsBracketing` corrected to `true` on Apple and
+  web (both are implemented at the controller level and work everywhere).
+- Web sample app: a manual-control panel (ISO/EV/WB/zoom/focus sliders) plus
+  `?ev=`/`?wb=`/`?zoom=`/`?focus=`/`?iso=` URL params and a `?view=caps` mode.
+- Verified live in Chrome (exposure, zoom, and focus visibly change the feed;
+  tier shows Full manual; all capabilities Supported — screenshots in
+  `doc/web/`). VM suite 79/79; browser suite 64/64 (adds digital-pipeline + DNG
+  tests that cross-check the Dart ports against the FFI C core).
+
 **Web support (getUserMedia backend + pure-Dart visual aids)**
 
 - **Conditional-import refactor**: `camera_pro.dart` now selects native (FFI) or

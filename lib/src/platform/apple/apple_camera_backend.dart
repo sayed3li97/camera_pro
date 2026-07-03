@@ -198,9 +198,9 @@ class AppleCameraBackend implements CameraBackend {
         supportedVideoCodecs: const <VideoCodec>[VideoCodec.h264],
         supportsRawCapture: true,   // linear-DNG via the C core writer
         supportsProRaw: false,
-        supportsBurstMode: false,
+        supportsBurstMode: true,    // controller-level captureBurst
         supportsHdr: false,
-        supportsBracketing: false,
+        supportsBracketing: true,   // controller-level captureExposureBracket
         supportsDepthCapture: false,
         supportsLidar: false,
         supportsMultiCamera: false,

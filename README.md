@@ -63,6 +63,7 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | Aperture control | 🚧 | Capability modelled; no hardware exposes it on mobile |
 | Manual controls — iOS (sensor) | ✅ | Wired to `AVCaptureDevice`: custom exposure duration + ISO, lens position, WB gains, zoom, torch — compiled against the iOS SDK |
 | Manual controls — macOS (digital) | ✅ | The built-in camera exposes **no** sensor controls (measured across AVFoundation, CoreMediaIO, and IOKit/USB — see note below), so ISO, shutter, exposure, white balance, focus, and zoom are applied by a **digital pipeline** in the C core (`camera_pro_adjust_pixels`, `camera_pro_digital_zoom`, `camera_pro_box_blur`). Verified changing the live feed. → `CameraTier.full` |
+| Manual controls — web (digital) | ✅ | Browsers expose almost no sensor controls, so the same six controls run through the **pure-Dart** digital pipeline (`NativeCore.adjustPixels`/`digitalZoom`/`boxBlur`). Verified live in Chrome (exposure/zoom/focus visibly change the feed). → `CameraTier.full` |
 
 ### Visual aids
 
@@ -124,7 +125,7 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 | macOS | ✅ preview + manual | ✅ | Live preview streaming on real cameras; full manual control set (ISO/shutter/exposure/WB/focus/zoom) via the digital pipeline since the built-in camera exposes no sensor controls → `CameraTier.full` |
 | Windows | ✅ CI | ✅ | Media Foundation backend (full 44-fn contract) compiles + lifecycle harness runs on CI; camera runtime ⛔ needs hardware |
 | Linux | ✅ CI | ✅ | V4L2 backend (full contract, mmap streaming) compiles + lifecycle harness runs on CI; camera runtime ⛔ needs hardware |
-| Web | ✅ | ✅ (pure Dart) | getUserMedia backend + pure-Dart visual aids; builds and runs in the browser, browser tests pass in CI |
+| Web | ✅ | ✅ (pure Dart) | getUserMedia backend, **full manual controls** + visual aids + RAW/DNG in pure Dart; reaches `CameraTier.full`. Builds and runs in the browser, browser tests pass in CI |
 
 All platforms get the C core and stub backend today. Platform camera access requires the corresponding HAL implementation.
 
@@ -212,8 +213,8 @@ The following results were produced on macOS arm64 with Flutter 3.44.1 / Dart 3.
 |---|---|
 | C core (`clang -std=c11 -O2 -Wall -Wextra -Werror`) | **60/60 checks pass** (arm64 NEON) |
 | Same harness compiled x86_64, run under **Rosetta 2** | **60/60** — SSSE3 histogram bit-exact vs scalar |
-| Dart unit + FFI tests (`flutter test`, VM) | **75/75 pass** |
-| Dart tests **in the browser** (`flutter test --platform chrome`) | **60/60 pass** (unit + web visual-aid kernels, compiled to JS) |
+| Dart unit + FFI tests (`flutter test`, VM) | **79/79 pass** |
+| Dart tests **in the browser** (`flutter test --platform chrome`) | **64/64 pass** (unit + web kernels + digital pipeline + DNG, compiled to JS) |
 | `flutter analyze` (package + example) | **No issues** |
 | GitHub Actions CI (`native.yml`) | **Green**: macos-14, ubuntu (gcc `-Werror` V4L2 + `-mssse3` core), windows (MSVC /W4 Media Foundation), **web** (browser tests + web-app build) |
 | Metal GPU cross-check (`metal_test.c`, Apple M1 Pro) | Histogram + zebra **bit-exact** vs C kernels; peaking within 0.005% |
@@ -223,7 +224,8 @@ The following results were produced on macOS arm64 with Flutter 3.44.1 / Dart 3.
 | Burst capture | **5 PNGs in ~1.2s** from one click |
 | EV bracket (−2/0/+2) | **Measured** mean luminance 25.8 / 96.9 / 183.4 |
 | Multi-camera | Two backends opened **different physical cameras** concurrently |
-| Web sample app in Chrome (getUserMedia) | **Live streaming** — 1000+ frames, all visual aids, capture ([screenshots](#web)) |
+| Web sample app in Chrome (getUserMedia) | **Full manual (DSLR) tier** — 1000+ frames, all six manual controls change the feed live, all visual aids, capture ([screenshots](#web)) |
+| Web RAW capture (pure-Dart linear-DNG) | **ffmpeg-decodes** the Dart-encoded DNG (20 direntries, matches the C writer) |
 | dartdoc / `dart pub publish --dry-run` | **0 warnings** each |
 
 ## Web
@@ -240,21 +242,34 @@ cd example
 flutter run -d chrome -t lib/web_main.dart
 ```
 
-Verified in Chrome against a synthetic camera device
+**Full manual controls on web, too.** Browsers expose almost no sensor controls
+through `MediaStreamTrack`, so — exactly like the macOS built-in camera —
+`camera_pro` applies ISO, shutter, exposure, white balance, focus, and zoom as a
+**digital pipeline** in pure Dart on every frame (`NativeCore.adjustPixels` /
+`digitalZoom` / `boxBlur`, ports of the C kernels). Every control is therefore
+`Supported` and a browser camera reaches **`CameraTier.full` — "Full manual
+(DSLR)"** — the same tier as native. The one honest exception is aperture
+(*NotSupported*: a fixed-aperture lens has no diaphragm). RAW capture is real
+too: a pure-Dart linear-DNG encoder (port of `dng_writer.c`) that ffmpeg decodes.
+
+Verified live in Chrome against a synthetic camera device
 (`--use-fake-device-for-media-stream`, which renders a spinning ball + timestamp):
 
 | | |
 |---|---|
+| **Full manual (DSLR) tier** — every control `Supported`; aperture the one honest exception | ![capabilities](doc/web/wc_06_caps.png) |
+| **Exposure** `+2.5 EV` — feed brightens (digital pipeline) | ![exposure](doc/web/wc_02_ev.png) |
+| **Zoom** `3.5×` — center crop-zoom | ![zoom](doc/web/wc_04_zoom.png) |
+| **Manual focus** `0.0` — digital defocus (box blur) | ![focus](doc/web/wc_05_focus.png) |
 | **Live preview + histogram** — getUserMedia stream, live RGB/luma histogram overlay | ![live](doc/web/web_01_live.png) |
 | **False color** — pure-Dart exposure-zone map | ![false color](doc/web/web_02_falsecolor.png) |
 | **Focus peaking** — pure-Dart Sobel edge highlight | ![peaking](doc/web/web_03_peaking.png) |
 | **Waveform** — pure-Dart luma waveform monitor | ![waveform](doc/web/web_04_waveform.png) |
 | **Capture** — `capturePhoto()` still held in memory (thumbnail, lower-right) | ![capture](doc/web/web_06_capture.png) |
 
-The status card reports **Platform: Web, MediaDevices** and **Kernels: dart**, and
-manual controls are honestly surfaced as *NotSupported* ("Not exposed by
-MediaStreamTrack on this camera") — the capability passport working exactly as on
-native.
+The status card reports **Platform: Web, MediaDevices**, **Kernels: dart**, and
+**Tier: Full manual (DSLR)** — the capability passport and manual-control pipeline
+working exactly as on native.
 
 ## Measured performance
 
