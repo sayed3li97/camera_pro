@@ -86,7 +86,7 @@ int32_t camera_pro_write_dng(
     if (!datetime) datetime = "2026:01:01 00:00:00";
 
     const uint32_t pixel_bytes = (uint32_t)width * (uint32_t)height * 3;
-    static const char software[] = "camera_pro 0.1.0";
+    static const char software[] = "camera_pro 0.0.1";
     const uint8_t dng_version[4] = {1, 4, 0, 0};
 
     /* ── Compute layout ──────────────────────────────────────────────────

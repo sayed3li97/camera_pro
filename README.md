@@ -4,7 +4,7 @@ A Flutter camera package built on a shared C/C++ core with a crash-proof Dart AP
 
 ---
 
-> **Project status: working camera engine (v0.1.0, pre-release)**
+> **Project status: working camera engine (v0.0.1, pre-release)**
 >
 > On macOS the example app opens the real camera and does live preview, all six manual controls, five live visual-aid overlays (histogram, focus peaking, zebra, false color, waveform — GPU-accelerated via Metal where available), PNG + RAW/DNG capture with EXIF, burst, EV bracketing, and H.264 video recording — every one of those verified live against real hardware. The same AVFoundation backend compiles for iOS with sensor-level manual controls. **Web** runs in the browser too: a getUserMedia backend with live preview, capture, and the visual aids reimplemented in pure Dart — verified in Chrome with screenshots ([see below](#web)). Linux (V4L2) and Windows (Media Foundation) backends implement the full HAL contract and pass CI on real ubuntu/windows runners (camera-hardware runtime pending machines with cameras). Android is not started — see [ROADMAP.md](ROADMAP.md) for the honest gate on every remaining item.
 
@@ -165,7 +165,7 @@ import 'package:camera_pro/camera_pro.dart';
 
 Future<void> main() async {
   // nativeCoreVersion is a real FFI call into the compiled C core.
-  print(CameraPro.nativeCoreVersion); // "0.1.0"
+  print(CameraPro.nativeCoreVersion); // "0.0.1"
   print(CameraPro.simdKernel);        // "NEON" on arm64, "scalar" otherwise
 
   // create() returns a controller backed by the stub HAL until a platform HAL lands.

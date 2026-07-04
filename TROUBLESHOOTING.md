@@ -1,7 +1,7 @@
 # Troubleshooting — camera_pro
 
 This guide covers known issues, their root causes, and concrete fixes for the
-`camera_pro` package (v0.1.0). Issues are presented as **Problem → Cause → Fix**.
+`camera_pro` package (v0.0.1). Issues are presented as **Problem → Cause → Fix**.
 
 ---
 
@@ -78,11 +78,18 @@ runs, the shared library is never produced, and every FFI call fails at runtime.
 
 - Locate a C compiler on the host (`clang` on macOS/Linux, MSVC or clang-cl on
   Windows).
-- Compile `src/core/*.c` and `src/platform/stub/camera_hal_stub.c` with
-  `-std=c11 -O2`.
+- Compile `src/core/*.c` plus the platform backend selected by target OS: the
+  AVFoundation HAL (`src/platform/apple/*.m`, Objective-C with ARC, linking
+  AVFoundation/Metal and friends) on macOS/iOS, or the conformant stub
+  (`src/platform/stub/camera_hal_stub.c`) on other native targets.
 - Produce a platform-appropriate shared library (`libcamera_pro_core.dylib`,
   `.so`, or `.dll`) as a `code_asset` that Flutter links into the test runner or
   app bundle.
+
+On **web** the hook compiles nothing by design: there is no C core on that
+target, and a pure-Dart implementation (byte-identical to the C kernels,
+cross-checked in tests) is used instead. A missing-symbol error therefore
+cannot occur on web.
 
 ---
 
@@ -141,31 +148,31 @@ regardless of the device, and all `Capability` fields come back as
 
 **Cause**
 
-This is **expected behavior in v0.1.0**. The only backend wired at this stage is
-`StubCameraBackend` — a conformant no-op HAL that returns an empty
-`CameraCapabilities` (all capabilities `NotSupported`). No real platform HAL is
-integrated yet:
+Whether this is expected depends on the platform. In v0.0.1 the default backend
+is selected per target:
 
-| Platform | Status |
-|----------|--------|
-| Android NDK Camera2 | 🚧 Scaffolded — not wired |
-| Apple AVFoundation | 🚧 Scaffolded — not wired |
-| Windows Media Foundation | 🚧 Scaffolded — not wired |
-| Linux V4L2 | 🚧 Scaffolded — not wired |
-| Web | 🚧 Scaffolded — not wired |
+| Platform | Default backend in v0.0.1 |
+|----------|---------------------------|
+| Apple AVFoundation (macOS/iOS) | ✅ `AppleCameraBackend` — wired, live-verified on real Mac cameras; all six manual controls reach `CameraTier.full` (via the digital pipeline where the sensor exposes no controls) |
+| Web | ✅ `WebCameraBackend` (getUserMedia) — wired, live-verified in Chrome; all six manual controls reach `CameraTier.full` via the pure-Dart digital pipeline |
+| Linux V4L2 | 🚧 Full 44-function C HAL implemented and CI-tested, but not yet exposed as a Dart backend — falls back to the stub |
+| Windows Media Foundation | 🚧 Full 44-function C HAL implemented and CI-tested, but not yet exposed as a Dart backend — falls back to the stub |
+| Android | 🚧 Not started — falls back to the stub |
 
+On the platforms that fall back to `StubCameraBackend` — a conformant no-op HAL
+that returns an empty `CameraCapabilities` (all capabilities `NotSupported`) —
 `determineTier(caps)` returns `CameraTier.basic` whenever no capabilities are
 supported, which is the correct result for the stub.
 
 **Fix**
 
-There is nothing to fix; the behavior is correct for the current version. You
-can:
-
-- Use `CameraTier.basic` as the trigger to display a "limited functionality"
-  banner in your UI.
-- Watch the repository for platform HAL releases that will expose real
-  capabilities on each platform.
+- **On Linux desktop, Windows desktop, or Android** there is nothing to fix;
+  the behavior is correct for v0.0.1. Use `CameraTier.basic` as the trigger to
+  display a "limited functionality" banner in your UI, and watch the repository
+  for the Dart backend wiring for these platforms (the Linux/Windows C HALs
+  already exist and pass the portable lifecycle harness on CI).
+- **On macOS, iOS, or web**, `CameraTier.basic` is *not* expected — verify that
+  camera permission was granted and that a camera device actually enumerates.
 - Supply a custom `CameraBackend` to `CameraPro.create(backend: myBackend)` if
   you are implementing your own HAL.
 
@@ -184,7 +191,8 @@ Flutter's native-assets build system caches compiled artifacts, but the cache
 is keyed on source file hashes and build configuration. If any of the following
 change between runs, a rebuild is triggered:
 
-- Any `src/core/*.c` or `src/platform/stub/*.c` file is modified (expected).
+- Any `src/core/*.c` file or platform backend source (`src/platform/apple/*.m`,
+  `src/platform/stub/*.c`) is modified (expected).
 - The build configuration (target OS, architecture, optimization level) changes.
 - The Flutter tool is upgraded, invalidating the build cache.
 - The working directory or project path changes (cache paths include the project
@@ -258,9 +266,12 @@ library to be installed separately from the C compiler itself.
   directory to `PATH`. Then set `LLVM_PATH` to the LLVM install root in
   `ffigen.yaml` or as an environment variable.
 
-**Note**: Regenerating bindings is only needed if you modify `camera_pro_core.h`.
-The pre-generated Dart FFI bindings are committed to the repository and work out
-of the box for normal use.
+**Note**: Running `ffigen` is entirely optional. The bindings shipped in
+v0.0.1 (`lib/src/ffi/camera_pro_bindings.dart`) are hand-maintained `@Native`
+bindings kept 1:1 with `camera_pro_core.h` and regression-tested per symbol, so
+the package builds and works out of the box without libclang. Regeneration via
+`ffigen.yaml` is only relevant if you modify `camera_pro_core.h` and prefer
+generating over hand-editing.
 
 ---
 
@@ -311,9 +322,12 @@ try {
 }
 ```
 
-**Tip**: On the stub backend, *all* setters will throw this error because the
-stub reports no capabilities as supported. This is expected until a real platform
-HAL is integrated.
+**Tip**: On the stub backend — the fallback on Linux desktop, Windows desktop,
+and Android in v0.0.1 — *all* setters will throw this error because the stub
+reports no capabilities as supported. This is expected there until the Dart
+backends for those platforms land. On macOS, iOS, and web the wired backends
+report all six manual controls (ISO, shutter, EV, white balance, focus, zoom)
+as `Supported`, so these setters succeed.
 
 ---
 
@@ -388,4 +402,4 @@ try {
 
 ---
 
-*Last updated: 2026-07-01 — camera_pro v0.1.0*
+*Last updated: 2026-07-04 — camera_pro v0.0.1*

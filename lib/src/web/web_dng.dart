@@ -45,7 +45,7 @@ Uint8List encodeLinearDng({
   String datetime = '2026:01:01 00:00:00',
 }) {
   if (stride <= 0) stride = width * 4;
-  const software = 'camera_pro 0.1.0';
+  const software = 'camera_pro 0.0.1';
   final pixelBytes = width * height * 3;
 
   // ── Layout (identical to the C writer) ────────────────────────────────────

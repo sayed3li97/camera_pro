@@ -1,11 +1,15 @@
 # Windows HAL Backend
 
-> **🚧 STATUS: SCAFFOLDED — NOT IMPLEMENTED**
+> **✅ C HAL implemented + CI-verified · 🚧 Dart wiring pending**
 >
-> This directory is a placeholder for the Windows platform HAL. The C functions
-> defined in `src/hal/camera_hal.h` are **not wired** on Windows. All Windows
-> builds currently fall through to `src/platform/stub/camera_hal_stub.c`.
-> No real camera access, frame delivery, or manual-control path exists yet.
+> [`camera_hal_windows.cpp`](camera_hal_windows.cpp) implements the full
+> 44-function [`camera_hal.h`](../../hal/camera_hal.h) contract against Media
+> Foundation (device enumeration, `IMFSourceReader`, `IAMCameraControl` /
+> `IAMVideoProcAmp` manual controls). It compiles with MSVC `/W4` and passes the
+> portable lifecycle harness on a real windows runner every push (see
+> `.github/workflows/native.yml`). **Gaps:** not yet exposed through a Dart
+> `CameraBackend` (desktop Dart falls back to the stub), and — with no camera on
+> CI runners — the hardware capture path has never been exercised.
 
 ---
 

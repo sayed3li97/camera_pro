@@ -1,9 +1,13 @@
 # Web Backend — `camera_pro`
 
-> **🚧 STATUS: Scaffolded, NOT implemented.**
-> No Web HAL code exists yet. The SDK currently falls back to the stub backend on all platforms,
-> including Web. None of the APIs described below are wired. This document records the intended
-> design so that contributors have a clear target.
+> **✅ STATUS: Implemented and live-verified in Chrome.**
+> `WebCameraBackend` drives the camera via `navigator.mediaDevices.getUserMedia`
+> (preview via `<video>`→`<canvas>` readback). All six manual controls run
+> through a pure-Dart digital pipeline (→ `CameraTier.full`); the visual-aid
+> kernels are pure-Dart ports of the C core (byte-identical, cross-checked);
+> RAW capture uses a pure-Dart linear-DNG encoder; video recording uses
+> `MediaRecorder`. Conditional imports keep `dart:ffi`/`dart:io` off the web
+> tree. Sample app: [`example/lib/web_main.dart`](../../../example/lib/web_main.dart).
 
 ---
 
@@ -93,8 +97,10 @@ The functions that must be implemented / forwarded:
 
 ## Control Mapping Table
 
-The table below shows how each `CameraProController` setter maps to a browser constraint.
-All are 🚧 not yet wired.
+The table below shows how each `CameraProController` setter is handled. Most
+browsers expose no sensor controls via `MediaStreamTrack`, so — like the macOS
+built-in camera — they run through the pure-Dart digital pipeline
+(`NativeCore.adjustPixels`/`digitalZoom`/`boxBlur`).
 
 | Dart setter | `applyConstraints` key | Unit / notes |
 |---|---|---|
@@ -258,4 +264,4 @@ can be developed and tested without a real browser camera.
 
 ---
 
-*camera_pro v0.1.0 — BSD-3-Clause*
+*camera_pro v0.0.1 — BSD-3-Clause*

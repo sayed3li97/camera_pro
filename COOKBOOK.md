@@ -1,15 +1,17 @@
 # camera_pro Cookbook
 
-Practical recipes for working with `camera_pro` v0.1.0. This file is split into two clear sections:
+Practical recipes for working with `camera_pro` v0.0.1. This file is split into two clear sections:
 
 - **Works today** — recipes that are fully implemented, tested, and runnable against the current codebase.
-- **Roadmap recipes** — intended future API shown for design reference only. Native platform HALs are not yet wired; these snippets will not work until those HALs land.
+- **Roadmap recipes** — intended future API shown for design reference. Each is marked 🚧 with an honest status of what exists versus what is still to build.
 
 ---
 
 ## Project status
 
-`camera_pro` v0.1.0 is a **foundation release**. The shared C core (SIMD histogram, lock-free buffer pool, YUV→RGBA conversion, Sobel focus peaking, zebra), the conformant stub HAL backend, and the full Dart control-plane (capability passport, state machine, typed errors, tier selection, controller) are implemented and verified. Real platform HALs (Android Camera2, Apple AVFoundation, Windows Media Foundation, Linux V4L2, Web) and GPU compute shaders are not yet integrated. Every recipe in this file is labelled accordingly.
+`camera_pro` v0.0.1 is a **working camera engine**. The shared C core (SIMD histogram, lock-free buffer pool, YUV→RGBA conversion, focus peaking, zebra, false color, waveform, digital adjust/zoom/blur, linear-DNG writer) and the full Dart control-plane (capability passport, state machine, typed errors, tier selection, controller, burst/bracket, `FrameProcessor` API) are implemented and verified.
+
+Platform backends: the **Apple AVFoundation backend** (macOS/iOS) is live-verified on real Mac cameras — preview, PNG/RAW capture, H.264 recording, burst, bracketing, multi-camera — with a **Metal GPU** overlay path bit-exact against the C kernels; the **Web backend** (getUserMedia) is live-verified in Chrome with all six manual controls (pure-Dart digital pipeline), RAW/DNG, and MediaRecorder video. The **Linux V4L2** and **Windows Media Foundation** C HALs implement the full 44-function contract and pass a lifecycle harness on CI, but are not yet exposed through a Dart backend (desktop Dart falls back to the conformant stub). **Android** is not started. Recipes below are labelled accordingly.
 
 ---
 
@@ -24,12 +26,12 @@ import 'package:camera_pro/camera_pro.dart';
 
 void printCoreInfo() {
   // Static helpers on CameraPro delegate to NativeCore internally.
-  print(CameraPro.nativeCoreVersion); // e.g. "0.1.0"
+  print(CameraPro.nativeCoreVersion); // e.g. "0.0.1"
   print(CameraPro.simdKernel);        // e.g. "NEON" on Apple Silicon
 
   // Or use NativeCore directly for more detail.
   final core = NativeCore();
-  print(core.versionString); // "0.1.0"
+  print(core.versionString); // "0.0.1"
   print(core.simdName);      // "NEON" | "SSE4.1" | "AVX2" | "SCALAR"
 }
 ```
@@ -390,34 +392,43 @@ void main() {
 
 ---
 
-## Roadmap recipes
+## Advanced & roadmap recipes
 
-The snippets below show the **intended** public API design for features that are not yet implemented. Native platform HALs must be wired before any of these work. Each is marked 🚧.
+RAW/DNG capture and video recording (below) **work today** on the wired backends
+(macOS/iOS and web). The remaining snippets show the **intended** public API for
+features still to build; each is marked 🚧 with an honest status.
 
 ---
 
-### RAW / DNG capture workflow 🚧
+### RAW / DNG capture workflow ✅
 
-> **Status:** 🚧 The `ImageFormat.raw` enum value and `capturePhoto` call exist in Dart. libtiff and libexif are **not** integrated; no platform HAL returns actual sensor data yet.
+> **Status:** ✅ Works on macOS/iOS (via the dependency-free C linear-DNG writer)
+> and on web (a pure-Dart port of the same writer). No libtiff/libexif needed;
+> the output is a DNG 1.4 file with an EXIF IFD (ffmpeg-verified).
 
 ```dart
-// ROADMAP — does not work today
 Future<void> captureRaw(CameraProController controller) async {
   if (!controller.capabilities.supportsRawCapture) {
     throw CameraFeatureNotSupportedError('RAW not available on this device');
   }
 
   final photo = await controller.capturePhoto(format: ImageFormat.raw);
-  // photo.dngBytes will contain a DNG-wrapped RAW buffer with EXIF metadata.
-  await File('capture.dng').writeAsBytes(photo.dngBytes!);
+  // On native, photo.rawPath points at the written .dng on disk.
+  // On web (no filesystem), photo.bytes holds the DNG bytes in memory.
+  final dng = photo.bytes;
+  if (dng != null) {
+    // e.g. offer it as a download, or on native read from photo.rawPath.
+  }
 }
 ```
 
 ---
 
-### ProRes / log video recording 🚧
+### Video recording ✅ (ProRes / log 🚧)
 
-> **Status:** 🚧 `VideoCodec`, `ColorProfile`, `Stabilization`, `Bitrate`, and `VideoResolution` value types exist. The record pipeline is not connected to any platform HAL.
+> **Status:** ✅ H.264 recording works — AVCaptureMovieFileOutput on macOS/iOS
+> (ffprobe-verified `.mov`) and MediaRecorder on web (h264/webm). 🚧 ProRes/log
+> codec selection, `ColorProfile`, and `Stabilization` are still roadmap.
 
 ```dart
 // ROADMAP — does not work today
@@ -473,25 +484,33 @@ Future<void> capturePortrait(CameraProController controller) async {
 
 ---
 
-### On-device ML frame processor 🚧
+### On-device ML frame processor ✅ (plumbing) / 🚧 (ML)
 
-> **Status:** 🚧 Not started. Requires Flutter texture registration and a frame-dispatch mechanism.
+> **Status:** ✅ The `FrameProcessor` plugin API is implemented and tested —
+> attach one and it receives every polled preview frame. 🚧 Wiring an actual
+> Core ML / TFLite model is your application code.
 
 ```dart
-// ROADMAP — does not work today
-void attachFrameProcessor(CameraProController controller) {
-  controller.setFrameProcessor((CameraFrame frame) {
-    // frame.rgbaBytes, frame.width, frame.height, frame.timestampUs
-    // Run Core ML / TFLite inference here.
-  });
+class MyDetector extends FrameProcessor {
+  @override
+  void onFrame(PreviewFrame frame) {
+    // frame.bytes (RGBA), frame.width, frame.height
+    // Run Core ML / TFLite inference here (keep it fast, or hand off to an isolate).
+  }
 }
+
+void attach(CameraProController controller) =>
+    controller.addFrameProcessor(MyDetector());
 ```
 
 ---
 
-### Multi-camera picture-in-picture 🚧
+### Multi-camera picture-in-picture ✅ (open) / 🚧 (composite UI)
 
-> **Status:** 🚧 Not started. Requires multi-stream HAL support and simultaneous texture registration.
+> **Status:** ✅ Opening two cameras at once works (verified: two backends
+> holding different physical devices concurrently on macOS). 🚧 Composing both
+> into a single picture-in-picture widget needs texture-based preview, which is
+> still roadmap.
 
 ```dart
 // ROADMAP — does not work today
@@ -509,7 +528,10 @@ Future<void> multiCamPiP() async {
 
 ### Focus stacking 🚧
 
-> **Status:** 🚧 Not started. Requires burst capture and manual focus stepping, both unimplemented on the native side.
+> **Status:** 🚧 Not built as a one-call helper. The primitives it needs —
+> `captureBurst` and manual focus (`setFocusDistance`) — both work today, so a
+> focus-stacking loop is straightforward to assemble; merging the stack into a
+> single all-in-focus image is the missing piece.
 
 ```dart
 // ROADMAP — does not work today

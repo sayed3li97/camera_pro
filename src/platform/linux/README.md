@@ -1,8 +1,8 @@
 # Linux Platform Backend
 
-> **🚧 SCAFFOLDED — NOT IMPLEMENTED**
+> **✅ C HAL implemented + CI-verified · 🚧 Dart wiring pending**
 >
-> This backend does not exist yet. The SDK currently runs on the **stub HAL** (`src/platform/stub/camera_hal_stub.c`) on Linux, which returns conformant no-op responses for every call. No real camera access occurs on Linux today. This document describes the planned implementation.
+> [`camera_hal_linux.c`](camera_hal_linux.c) implements the full 44-function [`camera_hal.h`](../../hal/camera_hal.h) contract against V4L2 (`/dev/video*` enumeration, `VIDIOC_QUERYCTRL` capability mapping, manual controls via V4L2 CIDs, mmap streaming with a pthread capture loop). It compiles with `gcc -Werror` and passes the portable lifecycle harness on a real ubuntu runner every push (see `.github/workflows/native.yml`). **Gaps:** not yet exposed through a Dart `CameraBackend` (desktop Dart falls back to the stub), and — with no camera on CI runners — the hardware capture path has never been exercised.
 
 ---
 
@@ -213,7 +213,7 @@ Until this backend is implemented, `CameraPro.create()` on Linux returns a contr
 ```dart
 final controller = await CameraPro.create(); // uses StubCameraBackend on Linux today
 print(controller.tier);  // CameraTier.basic
-print(CameraPro.nativeCoreVersion);  // "0.1.0" — real FFI call into libcamera_pro_core
+print(CameraPro.nativeCoreVersion);  // "0.0.1" — real FFI call into libcamera_pro_core
 ```
 
 ---

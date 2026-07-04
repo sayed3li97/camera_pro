@@ -12,7 +12,7 @@ int32_t camera_pro_core_version(void) {
 }
 
 const char* camera_pro_core_version_string(void) {
-    return "0.1.0";
+    return "0.0.1";
 }
 
 const char* camera_pro_error_string(int32_t error) {

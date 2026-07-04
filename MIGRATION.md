@@ -1,6 +1,6 @@
 # Migration Guide: `camera` and `camerawesome` → `camera_pro`
 
-> **Project status (v0.1.0):** This is an early foundation release. The shared C core, Dart control-plane, capability passport, typed errors, and stub HAL are implemented and verified. Real platform HAL backends (Android NDK Camera2, Apple AVFoundation, Windows Media Foundation, Linux V4L2, Web) are **🚧 roadmap** and not yet wired. This guide describes the **target API shape** so you can structure your migration now and drop in a live backend when it ships.
+> **Project status (v0.0.1):** The shared C core, Dart control-plane, capability passport, typed errors, and tier system are implemented and verified. Live backends ship for **Apple AVFoundation** (macOS/iOS — live-verified on real Mac cameras) and **Web** (`getUserMedia`, live-verified in Chrome). The **Linux V4L2** and **Windows Media Foundation** C HALs are fully implemented and CI-verified, but are not yet exposed through a Dart backend — desktop Dart on those platforms falls back to the stub. **Android** is 🚧 roadmap. On live platforms this guide describes the **shipping API**; on stub platforms you can structure your migration now and drop in a live backend when it ships. See [Not yet available](#not-yet-available) for the honest gap list.
 
 ---
 
@@ -104,7 +104,8 @@ CamerawesomeBuilder.awesome(
 **`camera_pro`**
 
 ```dart
-// Uses stub backend until a platform HAL is wired (see "Not yet available").
+// Returns the AVFoundation backend on macOS/iOS and WebCameraBackend on web.
+// Falls back to the stub backend on Linux/Windows desktop (see "Not yet available").
 final controller = await CameraPro.create();
 
 // Or target a specific device:
@@ -473,36 +474,40 @@ StreamBuilder<CameraState>(
 
 ## Not yet available
 
-> **Important:** Real platform HAL backends are **🚧 roadmap** and are not implemented in v0.1.0. Until they land, `CameraPro.create()` returns a controller backed by the **stub HAL**, which:
+> **Important:** In v0.0.1 `CameraPro.create()` returns a **live, verified backend** on macOS/iOS (AVFoundation) and web (`WebCameraBackend` over `getUserMedia`). On **Linux and Windows desktop** the Dart layer still falls back to the **stub HAL** — the C HALs for both platforms are fully implemented and CI-verified, but not yet wired to a Dart `CameraBackend` — and **Android** is not started. The stub:
 >
 > - Returns `CameraCapabilities.unsupported()` for all features.
 > - Reports `CameraTier.basic`.
 > - Does not open a real camera or display a preview.
 > - Does not write captured images to disk.
 >
-> This means the migration guide above describes the **target API shape**. You can write and test your UI logic (capability guards, error handling, tier switching) against the stub today. When an Android or iOS HAL ships you will drop in the backend and your control-plane code will work without changes.
+> On stub platforms you can still write and test your UI logic (capability guards, error handling, tier switching) today. When the Linux/Windows Dart wiring or the Android HAL ships you will drop in the backend and your control-plane code will work without changes.
 
 | Feature | Status |
 |---|---|
-| Android NDK Camera2 HAL | 🚧 roadmap |
-| Apple AVFoundation HAL | 🚧 roadmap |
-| Windows Media Foundation HAL | 🚧 roadmap |
-| Linux V4L2 HAL | 🚧 roadmap |
-| Web (MediaDevices) HAL | 🚧 roadmap |
-| Flutter texture registration / live preview | 🚧 roadmap |
-| Video recording | 🚧 roadmap |
-| Live streaming (RTMP/HLS/SRT) | 🚧 roadmap |
-| RAW/DNG + EXIF (libtiff/libexif) | 🚧 roadmap |
-| GPU compute shaders (Metal/Vulkan/D3D11/WebGPU) | 🚧 roadmap |
-| libyuv / libjpeg-turbo integration | 🚧 roadmap |
-| Multi-camera / depth / LiDAR | 🚧 roadmap |
-| Burst / bracket / HDR | 🚧 roadmap |
-| Frame processors | 🚧 roadmap |
+| Android NDK Camera2 HAL | 🚧 roadmap (not started; gated on hardware for honest verification) |
+| Apple AVFoundation HAL | ✅ live-verified on real Mac cameras; iOS sensor controls compile but have not yet run on a physical iPhone |
+| Windows Media Foundation HAL | ⚠️ full 44-function C HAL, compiled `/W4` and lifecycle-harness-green on CI; Dart backend wiring pending (Dart falls back to stub); never run against real camera hardware |
+| Linux V4L2 HAL | ⚠️ full 44-function C HAL, compiled `-Werror` and lifecycle-harness-green on CI; Dart backend wiring pending (Dart falls back to stub); never run against real camera hardware |
+| Web (MediaDevices) HAL | ✅ live-verified in Chrome — preview, all six manual controls (pure-Dart digital pipeline → `CameraTier.full`), RAW DNG, video recording |
+| Flutter texture registration / live preview | ✅ live preview ships (polled frames over FFI); texture-based zero-copy preview 🚧 roadmap |
+| Video recording | ✅ macOS H.264 `.mov` (ffprobe-verified); web via MediaRecorder (verified) |
+| Live streaming (RTMP/HLS/SRT) | 🚧 API surface only (`StreamConfig`/`StreamStatus`); transport not implemented — throws a typed error |
+| RAW/DNG + EXIF | ✅ dependency-free linear-DNG writer with EXIF (ffmpeg-verified); pure-Dart writer on web |
+| GPU compute shaders (Metal/Vulkan/D3D11/WebGPU) | ✅ Metal (runtime-compiled MSL, bit-exact vs C kernels); Vulkan/D3D11/WebGPU 🚧 roadmap |
+| libyuv / libjpeg-turbo integration | 🚧 roadmap (dependency-free NEON YUV→RGBA conversion ships instead) |
+| Multi-camera / depth / LiDAR | ✅ multi-camera concurrent open verified on macOS; depth/LiDAR 🚧 (needs a physical iPhone) |
+| Burst / bracket / HDR | ✅ burst (5 shots ~1.2 s) and EV bracketing (measured luminance at −2/0/+2) verified; HDR fusion 🚧 roadmap |
+| Frame processors | ✅ `FrameProcessor` plugin API implemented |
 
-**Already implemented and verified** in v0.1.0:
+**Already implemented and verified** in v0.0.1:
 
-- Shared C core: SIMD histogram (NEON, 36/36 C tests pass), lock-free buffer pool, scalar YUV→RGBA format conversion, Sobel focus peaking, zebra.
-- Conformant stub HAL (`StubCameraBackend` / `camera_hal_stub.c`).
-- Dart control-plane: capability passport, state machine, typed errors, tier selection, `CameraProController` with capability-guarded setters.
+- Shared C core: SIMD histogram (NEON + SSSE3 + scalar, bit-exact; x86 verified under Rosetta 2 and on CI), lock-free buffer pool, YUV420P/NV12/NV21→RGBA with NEON fast path (bit-exact), Sobel focus peaking, zebra, false color, waveform, digital adjust/zoom/blur, dependency-free linear-DNG writer with EXIF; 60-check C harness passing on arm64 and x86_64-under-Rosetta.
+- Apple AVFoundation backend, live-verified on real Mac cameras: enumeration, capabilities, live preview over FFI, PNG capture, RAW linear-DNG capture (ffmpeg-verified), H.264 video recording (ffprobe-verified), burst, EV bracketing, multi-camera concurrent open, permission flow. All six manual controls run on macOS through the C digital pipeline → `CameraTier.full`; real iOS sensor controls compile but have not yet run on a physical iPhone.
+- Metal GPU compute: runtime-compiled MSL histogram/peaking/zebra, bit-exact vs the C kernels on Apple M1 Pro, with automatic GPU/CPU dispatch.
+- Web backend (`getUserMedia`), live-verified in Chrome: preview, all six manual controls via a pure-Dart digital pipeline → `CameraTier.full`, pure-Dart visual-aid kernels byte-identical to C, pure-Dart linear-DNG RAW (ffmpeg-verified), MediaRecorder video recording, burst/bracket.
+- Linux V4L2 and Windows Media Foundation C HALs: full 44-function contract, compiled with `-Werror` / `/W4`, portable lifecycle harness green on real CI runners every push (not yet exposed through a Dart backend; never run against real camera hardware).
+- Conformant stub HAL (`StubCameraBackend` / `camera_hal_stub.c`) — the current fallback for Linux/Windows desktop Dart.
+- Dart control-plane: capability passport, state machine, typed errors, tier selection, `CameraProController` with capability-guarded setters, `captureBurst`, `captureExposureBracket`, `FrameProcessor` plugin API, quirks DB, thermal models, streaming API surface.
 - Native-assets FFI build wiring (`hook/build.dart`).
-- 59 Dart tests pass (54 pure-logic + 5 real FFI-through-compiled-core); `flutter analyze` reports no issues.
+- 80 VM Dart tests + 65 browser Dart tests pass; CI green on macos-14, ubuntu (gcc `-Werror`), windows (MSVC `/W4`), and web; dartdoc reports zero warnings.

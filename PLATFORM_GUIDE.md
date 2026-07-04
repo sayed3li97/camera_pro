@@ -1,6 +1,6 @@
 # camera_pro — Platform Guide
 
-This document describes the per-platform capabilities, intended native API mappings, and current implementation status for `camera_pro` v0.1.0. It is written against the **initial foundation commit**; the shared C core and Dart control-plane are complete and verified, but every platform HAL listed here is 🚧 scaffolded — the API contract exists, the native side is not yet wired.
+This document describes the per-platform capabilities, native API mappings, and current implementation status for `camera_pro` v0.0.1. The shared C core and Dart control-plane are complete and verified; the Apple (macOS/iOS) and Web backends are implemented and live-verified; the Linux and Windows C HALs are fully implemented and CI-verified (Dart wiring pending); Android has not been started.
 
 ---
 
@@ -8,28 +8,31 @@ This document describes the per-platform capabilities, intended native API mappi
 
 | Layer | Status |
 |---|---|
-| Shared C core (histogram, buffer pool, YUV→RGBA, focus peaking, zebra) | ✅ Implemented & verified (36/36 C tests, NEON cross-checked) |
-| Dart control-plane (capability passport, state machine, typed errors, tier selection, controller) | ✅ Implemented & verified (59 Dart tests, `flutter analyze` clean) |
+| Shared C core (histogram, buffer pool, YUV→RGBA, focus peaking, zebra, false color, waveform, digital adjust/zoom/blur) | ✅ Implemented & verified (60-check C harness passing on arm64 **and** x86_64-under-Rosetta; NEON + SSSE3 SIMD bit-exact vs scalar; measured `bench.c` numbers) |
+| Dart control-plane (capability passport, state machine, typed errors, tier selection, controller, burst/bracket, `FrameProcessor` API, quirks DB) | ✅ Implemented & verified (80 VM Dart tests + 65 browser tests, `flutter analyze` clean, dartdoc 0 warnings) |
 | Native-assets FFI build wiring (`hook/build.dart`) | ✅ Compiles `libcamera_pro_core` automatically on `flutter test`/`flutter run` |
-| Conformant stub HAL (`StubCameraBackend`) | ✅ Passes all tests; degrades every platform to `CameraTier.basic` |
-| All real platform HALs (Android, iOS/macOS, Windows, Linux, Web) | 🚧 Scaffolded — C interface designed, not implemented |
-| GPU compute shaders (Metal, Vulkan, D3D11, WebGPU) | 🚧 Designed, not implemented |
-| libyuv / libjpeg-turbo integration | 🚧 Not integrated |
-| RAW/DNG + EXIF (libtiff / libexif) | 🚧 Not integrated |
-| Video recording, live streaming, multi-camera, burst/HDR, frame processors | ❌ Not started |
+| Conformant stub HAL (`StubCameraBackend`) | ✅ Passes all tests; fallback for platforms without a wired Dart backend |
+| Apple AVFoundation backend (macOS/iOS) | ✅ Implemented, live-verified on real Mac cameras (preview, capture, RAW DNG, H.264 video, burst, bracketing, multi-camera) |
+| Web backend (`WebCameraBackend`, getUserMedia) | ✅ Implemented, live-verified in Chrome (full tier via pure-Dart digital pipeline) |
+| Linux V4L2 + Windows Media Foundation C HALs | ✅ Full 44-function HAL contract implemented; compile with `-Werror` / `/W4` and pass the lifecycle harness on CI runners every push. 🚧 Dart backend wiring pending; not yet run against real camera hardware |
+| Android backend | ❌ Not started (gated on hardware for honest verification) |
+| GPU compute shaders | ✅ Metal (runtime-compiled MSL histogram/peaking/zebra, bit-exact vs C on Apple M1 Pro, auto GPU/CPU dispatch); 🚧 Vulkan / D3D11 / WebGPU not implemented |
+| RAW/DNG + EXIF | ✅ Dependency-free linear-DNG writer with EXIF (C core + pure-Dart web port, both ffmpeg-verified) |
+| Video recording, multi-camera, burst/bracketing, frame processors | ✅ Implemented & verified (H.264 `.mov` ffprobe-verified on macOS; MediaRecorder on web) |
+| Live streaming transport (RTMP/SRT), HDR fusion | ❌ Not implemented — `StreamConfig`/`StreamStatus` API surface exists, transport throws a typed error |
 
 ---
 
 ## Platform × Capability Matrix
 
-| Platform | Backend API planned | GPU compute planned | Manual controls expected | Current status |
+| Platform | Backend API | GPU compute | Manual controls | Current status |
 |---|---|---|---|---|
-| **Android** | NDK Camera2 (`ACameraManager`, `ACameraDevice`) | Vulkan compute | ISO, Shutter, EV, WB, Focus, Zoom, Flash | 🚧 HAL scaffolded, not wired |
-| **iOS** | AVFoundation (`AVCaptureDevice`) | Metal compute | ISO, Shutter, EV, WB, Focus, Zoom, Flash | 🚧 HAL scaffolded, not wired |
-| **macOS** | AVFoundation (`AVCaptureDevice`) | Metal compute | ISO, Shutter, EV, WB, Focus, Zoom (USB cams limited) | 🚧 HAL scaffolded, not wired |
-| **Windows** | Media Foundation (`IMFSourceReader`, `IMFMediaSource`) | D3D11 compute | EV, WB, Zoom; ISO/Shutter device-dependent | 🚧 HAL scaffolded, not wired |
-| **Linux** | V4L2 (`v4l2_queryctrl`, `VIDIOC_S_CTRL`) | Vulkan compute | EV, WB, Focus; ISO/Shutter device-dependent | 🚧 HAL scaffolded, not wired |
-| **Web** | `MediaDevices.getUserMedia()` + `ImageCapture` API | WebGPU compute | EV, WB, Zoom (browser-permitting); ISO/Shutter limited | 🚧 HAL scaffolded, not wired |
+| **Android** | NDK Camera2 (`ACameraManager`, `ACameraDevice`) — planned | Vulkan compute — planned | ISO, Shutter, EV, WB, Focus, Zoom, Flash | ❌ Not started (gated on hardware for honest verification) |
+| **iOS** | AVFoundation (`AVCaptureDevice`) | Metal compute | ISO, Shutter, EV, WB gains, Focus, Zoom, Torch (real sensor controls) | ✅ Backend implemented, compiles for iOS; 🚧 not yet run on a physical iPhone |
+| **macOS** | AVFoundation (`AVCaptureDevice`) | Metal compute (bit-exact vs C, verified on M1 Pro) | All six controls via C-core digital pipeline → `CameraTier.full` | ✅ Live-verified on real Mac cameras |
+| **Windows** | Media Foundation (`IMFSourceReader`, `IMFMediaSource`) | D3D11 compute — planned | EV, WB, Zoom; ISO/Shutter device-dependent | ✅ Full C HAL, CI-verified compile + lifecycle; 🚧 Dart wiring pending, no real-hardware run yet |
+| **Linux** | V4L2 (`v4l2_queryctrl`, `VIDIOC_S_CTRL`) | Vulkan compute — planned | EV, WB, Focus; ISO/Shutter device-dependent | ✅ Full C HAL, CI-verified compile + lifecycle; 🚧 Dart wiring pending, no real-hardware run yet |
+| **Web** | `MediaDevices.getUserMedia()` via `package:web` | Pure-Dart kernels (byte-identical to C); WebGPU — planned | All six controls via pure-Dart digital pipeline → `CameraTier.full` | ✅ Live-verified in Chrome |
 
 ---
 
@@ -74,7 +77,9 @@ try {
 
 ### Stub Backend and Tier Today
 
-`StubCameraBackend` returns `CameraCapabilities.unsupported()` for all fields, which causes `determineTier` to return `CameraTier.basic` unconditionally. This is the only tier achievable until a real platform HAL is wired. Calls to capability-guarded setters on the stub throw `CameraFeatureNotSupportedError` with a clear reason string.
+`StubCameraBackend` returns `CameraCapabilities.unsupported()` for all fields, which causes `determineTier` to return `CameraTier.basic` unconditionally. Calls to capability-guarded setters on the stub throw `CameraFeatureNotSupportedError` with a clear reason string.
+
+The stub is now the fallback only for platforms without a wired Dart backend: Android (backend not started) and desktop Linux/Windows (the C HALs are complete, but the Dart `CameraBackend` wiring is pending). On macOS the Apple backend reaches `CameraTier.full` via the C-core digital pipeline (verified live), and on the web the pure-Dart digital pipeline likewise reaches `CameraTier.full` (verified live in Chrome).
 
 ---
 
@@ -93,19 +98,19 @@ try {
 | `setFocusDistance(double)` | `ACAMERA_LENS_FOCUS_DISTANCE` |
 | `setZoom(double)` | `ACAMERA_CONTROL_ZOOM_RATIO` (API 30+) or crop-region |
 | `setFlashMode(FlashMode)` | `ACAMERA_FLASH_MODE` |
-| `capturePhoto(format: ImageFormat.raw)` | `AIMAGE_FORMAT_RAW16` (target; libtiff not yet integrated) |
+| `capturePhoto(format: ImageFormat.raw)` | `AIMAGE_FORMAT_RAW16` (target; will feed the built-in dependency-free linear-DNG writer) |
 
 **GPU compute target:** Vulkan compute shaders for histogram, focus peaking, and zebra overlays (replacing scalar C fallback at runtime).
 
-**Current status:** 🚧 `camera_hal.h` interface designed; `camera_hal_stub.c` is the only active HAL. No JNI or NDK linkage exists yet.
+**Current status:** ❌ Not started — deliberately gated on physical Android hardware so every claim can be honestly verified. `camera_hal.h` interface is designed; no JNI or NDK linkage exists yet; Android falls back to the stub.
 
 ---
 
 ### iOS — AVFoundation + Metal
 
-**Planned backend:** `AVCaptureSession` / `AVCaptureDevice` / `AVCapturePhotoOutput` bridged to C via a thin Objective-C++ shim.
+**Backend:** `AVCaptureSession` / `AVCaptureDevice` bridged to C via a thin Objective-C++ shim — implemented.
 
-| Dart control | Intended iOS mapping |
+| Dart control | iOS mapping |
 |---|---|
 | `setIso(Iso)` | `AVCaptureDevice.setExposureModeCustom(duration:ISO:)` |
 | `setShutterSpeed(ShutterSpeed)` | `AVCaptureDevice.setExposureModeCustom(duration:ISO:)` — `CMTime` duration |
@@ -114,29 +119,27 @@ try {
 | `setFocusDistance(double)` | `AVCaptureDevice.setFocusModeLocked(lensPosition:)` |
 | `setZoom(double)` | `AVCaptureDevice.videoZoomFactor` |
 | `setFlashMode(FlashMode)` | `AVCapturePhotoSettings.flashMode` |
-| `capturePhoto(format: ImageFormat.raw)` | `AVCapturePhotoSettings(rawPixelFormatType:)` (target; libtiff not integrated) |
+| `capturePhoto(format: ImageFormat.raw)` | Frame-grab → built-in linear-DNG writer (implemented); `AVCapturePhotoSettings(rawPixelFormatType:)` / ProRAW is a future target |
 
-**GPU compute target:** Metal compute shaders invoked from the C core via a Metal context pointer; histogram and overlay kernels are designed targets.
+**GPU compute:** Metal compute shaders implemented — runtime-compiled MSL histogram, focus-peaking, and zebra kernels, bit-exact vs the C kernels (verified on Apple M1 Pro), with automatic GPU/CPU dispatch (`MetalCompute`).
 
-**Current status:** 🚧 HAL interface defined; Objective-C++ shim not written; Metal pipeline not wired.
+**Current status:** ✅ Backend implemented and shared with macOS. The real sensor controls above (custom exposure/ISO, lens position, WB gains, zoom, torch) compile for iOS. 🚧 Not yet run on a physical iPhone — on-device verification, depth/LiDAR, and ProRAW are gated on hardware.
 
 ---
 
 ### macOS — AVFoundation + Metal
 
-macOS shares the AVFoundation API with iOS but with notable differences:
+macOS shares the AVFoundation backend with iOS but with notable differences:
 
-- External USB/Thunderbolt cameras may not expose manual ISO or shutter; `determineTier` will return `CameraTier.basic` for those devices.
-- `videoZoomFactor` may be unavailable on some built-in FaceTime cameras; zoom would fall back to `NotSupported`.
+- Built-in and USB/Thunderbolt Mac cameras expose no manual sensor controls through AVFoundation. Rather than degrading to `CameraTier.basic`, all six controls (ISO, shutter, EV, WB, focus, zoom) run through a **digital pipeline in the C core**, so macOS reaches `CameraTier.full` — verified live on real Mac cameras.
 - The Metal compute path is identical to iOS (same GPU family on Apple Silicon).
 
-| Dart control | Intended macOS mapping | Notes |
+| Dart control | macOS mapping | Notes |
 |---|---|---|
-| `setIso` / `setShutterSpeed` | Same as iOS | USB cameras often `NotSupported` |
-| `setZoom` | `videoZoomFactor` or `NotSupported` | Device-dependent |
-| All others | Same as iOS | — |
+| All six manual controls | C-core digital pipeline (adjust/zoom/blur kernels) | Verified live; sensor-level control unavailable on Mac cameras |
+| Everything else | Same as iOS | — |
 
-**Current status:** 🚧 Shared with iOS scaffolding; not wired.
+**Current status:** ✅ Live-verified on real Mac cameras: enumeration, capabilities, live preview over FFI into Flutter, PNG capture, RAW linear-DNG capture (ffmpeg-verified), H.264 video recording (ffprobe-verified `.mov`), burst (5 shots in ~1.2 s), EV bracketing (measured luminance 25.8 / 96.9 / 183.4 at −2/0/+2), multi-camera concurrent open, and the camera permission flow. Note: stills are frame-grabs at preview resolution; full-res `AVCapturePhotoOutput` stills are a future target.
 
 ---
 

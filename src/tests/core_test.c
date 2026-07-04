@@ -41,8 +41,8 @@ static uint32_t xrand(void) {
 
 static void test_version(void) {
     printf("version / introspection\n");
-    CHECK(camera_pro_core_version() == ((0 << 16) | (1 << 8) | 0), "version encodes 0.1.0");
-    CHECK(strcmp(camera_pro_core_version_string(), "0.1.0") == 0, "version string");
+    CHECK(camera_pro_core_version() == ((0 << 16) | (0 << 8) | 1), "version encodes 0.0.1");
+    CHECK(strcmp(camera_pro_core_version_string(), "0.0.1") == 0, "version string");
     CHECK(camera_pro_simd_name() != NULL, "simd name non-null");
     CHECK(strcmp(camera_pro_error_string(CAMERA_ERROR_PERMISSION_DENIED),
                  "Camera permission denied") == 0, "error string");

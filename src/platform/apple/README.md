@@ -1,6 +1,6 @@
 # Apple HAL (iOS + macOS) — AVFoundation
 
-Status: **control-plane implemented & verified ✅ · preview/capture roadmap 🚧**
+Status: **live-verified on real Mac cameras ✅** — preview, PNG/RAW capture, H.264 recording, burst, bracketing, multi-camera, Metal GPU overlays. iOS sensor controls compile against the SDK (not yet run on a device).
 
 This is the first real platform backend. One Objective-C file
 ([`camera_hal_apple.m`](camera_hal_apple.m)) implements the entire
@@ -22,9 +22,12 @@ from Dart by [`AppleCameraBackend`](../../../lib/src/platform/apple/apple_camera
 | White balance (Kelvin) | ✅ iOS · ❌ macOS | `deviceWhiteBalanceGainsForTemperatureAndTintValues:` |
 | Zoom | ✅ iOS · ❌ macOS | `videoZoomFactor` |
 | Torch | ✅ iOS · ❌ macOS | `setTorchModeOnWithLevel:` |
-| Preview texture | 🚧 | `CVMetalTextureCache` → Flutter `TextureRegistry` not wired |
-| Photo / video capture | 🚧 | `AVCapturePhotoOutput` / `AVCaptureMovieFileOutput` not wired |
-| Metal GPU visual aids | 🚧 | Histogram/focus-peaking shaders not written |
+| Live preview | ✅ | Frames copied over FFI into `dart:ui` (polled). Zero-copy `CVMetalTextureCache` → `TextureRegistry` is roadmap |
+| Photo capture | ✅ | Frame-grab → PNG / linear-DNG + EXIF. Full-res `AVCapturePhotoOutput` still roadmap |
+| Video recording | ✅ | `AVCaptureMovieFileOutput` → H.264 `.mov` (ffprobe-verified) |
+| Burst / EV bracket | ✅ | Controller-level; verified (5-shot burst, −2/0/+2 bracket) |
+| Metal GPU visual aids | ✅ | Runtime-compiled MSL histogram/peaking/zebra, bit-exact vs the C kernels |
+| macOS manual controls | ✅ | Digital pipeline in the C core (see below) → `CameraTier.full` |
 
 ## The macOS ≠ iOS reality
 
