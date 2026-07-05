@@ -5,9 +5,11 @@ says how) · 🚧 partially done / API modelled · ⛔ gated on hardware or
 infrastructure this project's CI and dev machines don't have · ❌ not started.
 
 Every ✅ below was verified by at least one of: the 60-check C harness, the
-71-test Dart suite, the GPU cross-check harness, CI runners (ubuntu/windows/
-macos), Rosetta x86 runs, ffprobe/ffmpeg inspection of produced files, or
-live operation of the example app against real cameras.
+Dart suite (80 VM tests + 65 browser tests), the GPU cross-check harness, CI
+runners (ubuntu/windows/macos/web), Rosetta x86 runs, ffprobe/ffmpeg inspection
+of produced files, or live operation of the example app against real cameras.
+
+**Published:** [pub.dev/packages/camera_pro](https://pub.dev/packages/camera_pro) — v0.0.1.
 
 ---
 
@@ -21,6 +23,7 @@ live operation of the example app against real cameras.
 | YUV420P/NV12/NV21 → RGBA (NEON fast path for 420P) | ✅ bit-exact vs reference |
 | Native-assets FFI build hook | ✅ |
 | Capability passport / state machine / typed errors / tiers | ✅ |
+| `isLeaf: true` on O(1) FFI calls (introspection + buffer-pool ops) | ✅ frame kernels kept non-leaf on purpose (they'd stall GC mid-frame) |
 | ffigen-generated bindings (replace hand-written) | 🚧 hand-written `@Native` bindings ship; regression-tested per symbol |
 
 ## Phase 2 — Apple Backend (AVFoundation) ✅ (complete for macOS-verifiable scope)
@@ -84,7 +87,7 @@ unverifiable device code).
 |------|--------|
 | Linux backend (V4L2, full 44-function contract) | ✅ compiles + lifecycle harness passes on CI ubuntu runner · ⛔ camera-hardware runtime untested |
 | Windows backend (Media Foundation, full contract) | ✅ compiles + lifecycle harness passes on CI windows runner · ⛔ camera-hardware runtime untested |
-| Web backend | ✅ — conditional-import refactor done (`dart:ffi`/`dart:io` kept off the web tree via `if (dart.library.js_interop)` exports); `WebCameraBackend` on `package:web` getUserMedia. **Full manual controls** (ISO/shutter/EV/WB/focus/zoom) via the pure-Dart digital pipeline → reaches `CameraTier.full`; visual aids + linear-DNG RAW reimplemented in pure Dart (cross-checked byte-for-byte against the C core). Builds and runs in the browser; browser tests + web-app build gated in CI. WebGPU compute path remains future work |
+| Web backend | ✅ — conditional-import refactor done (`dart:ffi`/`dart:io` kept off the web tree via `if (dart.library.js_interop)` exports); `WebCameraBackend` on `package:web` getUserMedia. **Full manual controls** (ISO/shutter/EV/WB/focus/zoom) via the pure-Dart digital pipeline → reaches `CameraTier.full`; visual aids + linear-DNG RAW reimplemented in pure Dart (cross-checked byte-for-byte against the C core); **video recording** via `MediaRecorder` (h264/webm, verified). Builds and runs in the browser; browser tests + web-app build gated in CI. WebGPU compute path remains future work |
 
 ## Phase 8 — Polish & Publication ✅ (complete)
 
@@ -92,9 +95,9 @@ unverifiable device code).
 |------|--------|
 | Measured performance benchmarks (`src/tests/bench.c`) | ✅ real numbers in README (including the honest scalar-beats-NEON histogram result) |
 | dartdoc | ✅ 0 warnings / 0 errors |
-| `dart pub publish --dry-run` | ✅ 0 warnings (313 KB archive) |
-| CI (macos/ubuntu/windows, every push) | ✅ green |
-| pub.dev publication | user's call — the package validates cleanly |
+| `dart pub publish --dry-run` | ✅ 0 warnings (~375 KB archive) |
+| CI (macos/ubuntu/windows/web, every push) | ✅ green |
+| pub.dev publication | ✅ published as **v0.0.1** |
 | Localization of error strings | ❌ (English only; messages centralised in `errors.dart` / `camera_pro_error_string`) |
 
 ---
