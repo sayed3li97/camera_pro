@@ -1,6 +1,12 @@
 # camera_pro
 
+[![pub package](https://img.shields.io/pub/v/camera_pro.svg)](https://pub.dev/packages/camera_pro)
+[![license: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue.svg)](LICENSE)
+[![CI](https://github.com/sayed3li97/camera_pro/actions/workflows/native.yml/badge.svg)](https://github.com/sayed3li97/camera_pro/actions/workflows/native.yml)
+
 A Flutter camera package built on a shared C/C++ core with a crash-proof Dart API and a capability passport pattern — designed for production-quality camera UX across all platforms.
+
+> Published on pub.dev: **[pub.dev/packages/camera_pro](https://pub.dev/packages/camera_pro)** · `flutter pub add camera_pro`
 
 ---
 

@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **FFI:** marked the O(1) native calls `isLeaf: true` — the introspection
+  queries (`version`, `simd_*`, `error_string`) and the lock-free buffer-pool
+  ops (`acquire`/`release`/`available`/`capacity`). The per-frame compute
+  kernels and `write_dng` are deliberately left non-leaf (a leaf call would
+  hold GC off a safepoint for the kernel's whole duration, and the transition
+  it saves is noise next to a 0.7–34 ms kernel).
+
+### Docs
+
+- Added a pub.dev version badge, CI badge, and install line to the README.
+- Refreshed `ROADMAP.md` stats (80 VM + 65 browser tests; ~375 KB archive;
+  marked pub.dev **published**; noted web `MediaRecorder` video recording).
+
 ## [0.0.1] - 2026-07-04
 
 Initial open-source release. Everything below is part of this first version;
