@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1180 480" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Berkeley Mono','JetBrains Mono','SF Mono',ui-monospace,monospace">
+  <title>camera_pro SIMD across architectures</title>
+  <desc>The histogram kernel has NEON, SSSE3, and scalar paths that all produce bit-exact output; a bench shows auto-vectorized scalar edging hand-written NEON on M1.</desc>
+  <defs><filter id="gb" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3"/></filter>
+    <style>
+      .node{animation:in .5s ease both}@keyframes in{from{opacity:0}to{opacity:1}}
+      .flow{stroke-dasharray:3 9;animation:fl 1.3s linear infinite}@keyframes fl{to{stroke-dashoffset:-24}}
+      .t{fill:#cbd2dc;font-size:15px}.s{fill:#6a7482;font-size:11.5px}.cap{fill:#8b93a1;font-size:14px}.acc{fill:#4a9eff}.lbl{fill:#8b93a1;font-size:12px}
+    </style>
+  </defs>
+  <rect width="1180" height="480" rx="18" fill="#0a0d13"/>
+  <rect x="10" y="10" width="1160" height="460" rx="16" fill="none" stroke="#1a2230"/>
+
+  <g class="node" style="animation-delay:.05s">
+    <rect x="60" y="188" width="210" height="72" rx="10" fill="#0e131c" stroke="#4a9eff"/>
+    <text class="t" x="165" y="220" text-anchor="middle">histogram kernel</text>
+    <text class="s" x="165" y="240" text-anchor="middle">fixed-point luma</text>
+  </g>
+  <g stroke="#37414f" fill="none" stroke-width="1.4">
+    <path d="M270,206 C 312,206 312,124 350,124"/>
+    <path d="M270,224 H350"/>
+    <path d="M270,242 C 312,242 312,324 350,324"/>
+    <path d="M580,124 C 616,124 616,214 650,214"/>
+    <path d="M580,224 H650"/>
+    <path d="M580,324 C 616,324 616,244 650,244"/>
+  </g>
+  <g class="node" style="animation-delay:.2s"><rect x="350" y="96" width="230" height="56" rx="10" fill="#0e131c" stroke="#2a3442"/><text class="t" x="465" y="130" text-anchor="middle">NEON · arm64</text></g>
+  <g class="node" style="animation-delay:.3s"><rect x="350" y="196" width="230" height="56" rx="10" fill="#0e131c" stroke="#2a3442"/><text class="t" x="465" y="230" text-anchor="middle">SSSE3 · x86</text></g>
+  <g class="node" style="animation-delay:.4s"><rect x="350" y="296" width="230" height="56" rx="10" fill="#0e131c" stroke="#2a3442"/><text class="t" x="465" y="330" text-anchor="middle">scalar · fallback</text></g>
+
+  <g class="node" style="animation-delay:.55s"><rect x="650" y="196" width="160" height="60" rx="10" fill="#0e131c" stroke="#4a9eff"/><text class="t" x="730" y="223" text-anchor="middle">bit-exact</text><text class="s" x="730" y="242" text-anchor="middle">verified on CI</text></g>
+
+  <text class="lbl" x="880" y="150" fill="#565f6e">1080p histogram · M1 Pro</text>
+  <g class="node" style="animation-delay:.7s">
+    <text class="lbl" x="880" y="192">scalar</text><rect x="950" y="180" width="92" height="14" rx="3" fill="#4a9eff"/><text class="lbl" x="1052" y="192">2.3 ms</text>
+    <text class="lbl" x="880" y="228">NEON</text><rect x="950" y="216" width="124" height="14" rx="3" fill="#2f6bb0"/><text class="lbl" x="1084" y="228">3.1 ms</text>
+  </g>
+
+  <circle r="4.5" fill="#4a9eff" filter="url(#gb)"><animateMotion dur="3.2s" repeatCount="indefinite" calcMode="linear" path="M165,224 L350,224 L580,224 L650,224"/></circle>
+
+  <text class="cap" x="60" y="430">Same bits on every arch — x86 checked under Rosetta 2 + CI.  <tspan class="acc">honest: auto-vectorized scalar edges hand-NEON here</tspan></text>
+</svg>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1180 500" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Berkeley Mono','JetBrains Mono','SF Mono',ui-monospace,monospace">
+  <title>camera_pro capture paths</title>
+  <desc>capturePhoto routes one frame to three encoders: PNG via dart:ui, a linear-DNG writer, and a video recorder.</desc>
+  <defs><filter id="ga" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3"/></filter>
+    <style>
+      .node{animation:in .5s ease both}@keyframes in{from{opacity:0}to{opacity:1}}
+      .flow{stroke-dasharray:3 9;animation:fl 1.3s linear infinite}@keyframes fl{to{stroke-dashoffset:-24}}
+      .t{fill:#cbd2dc;font-size:15px}.s{fill:#6a7482;font-size:11.5px}.cap{fill:#8b93a1;font-size:14px}.acc{fill:#4a9eff}
+    </style>
+  </defs>
+  <rect width="1180" height="500" rx="18" fill="#0a0d13"/>
+  <rect x="10" y="10" width="1160" height="480" rx="16" fill="none" stroke="#1a2230"/>
+
+  <g class="node" style="animation-delay:.05s">
+    <rect x="60" y="206" width="220" height="72" rx="10" fill="#0e131c" stroke="#4a9eff"/>
+    <text class="t" x="170" y="238" text-anchor="middle">capturePhoto()</text>
+    <text class="s" x="170" y="258" text-anchor="middle">png · raw · rawPlusJpeg</text>
+  </g>
+
+  <g stroke="#37414f" fill="none" stroke-width="1.4">
+    <path d="M280,224 C 322,224 322,126 360,126"/>
+    <path d="M280,242 H360"/>
+    <path d="M280,260 C 322,260 322,354 360,354"/>
+    <path d="M610,126 H690" class="flow" stroke="#4a9eff" opacity=".6"/>
+    <path d="M610,240 H690" class="flow" stroke="#4a9eff" opacity=".6"/>
+    <path d="M640,354 H690" class="flow" stroke="#4a9eff" opacity=".6"/>
+  </g>
+
+  <g class="node" style="animation-delay:.2s"><rect x="360" y="96" width="250" height="60" rx="10" fill="#0e131c" stroke="#2a3442"/><text class="t" x="485" y="123" text-anchor="middle">PNG · dart:ui</text><text class="s" x="485" y="142" text-anchor="middle">image.toByteData</text></g>
+  <g class="node" style="animation-delay:.32s"><rect x="360" y="210" width="250" height="60" rx="10" fill="#0e131c" stroke="#2a3442"/><text class="t" x="485" y="237" text-anchor="middle">linear-DNG writer</text><text class="s" x="485" y="256" text-anchor="middle">C core / pure-Dart</text></g>
+  <g class="node" style="animation-delay:.44s"><rect x="360" y="324" width="280" height="60" rx="10" fill="#0e131c" stroke="#2a3442"/><text class="t" x="500" y="351" text-anchor="middle">video recorder</text><text class="s" x="500" y="370" text-anchor="middle">MediaRecorder / AVFoundation</text></g>
+
+  <g class="node" style="animation-delay:.55s"><rect x="690" y="96" width="170" height="60" rx="10" fill="#0b0f17" stroke="#222b39"/><text class="t" x="775" y="131" text-anchor="middle">.png</text></g>
+  <g class="node" style="animation-delay:.62s"><rect x="690" y="210" width="170" height="60" rx="10" fill="#0e131c" stroke="#4a9eff"/><text class="t" x="775" y="238" text-anchor="middle">.dng</text><text class="s" x="775" y="256" text-anchor="middle">+ EXIF</text></g>
+  <g class="node" style="animation-delay:.7s"><rect x="690" y="324" width="170" height="60" rx="10" fill="#0b0f17" stroke="#222b39"/><text class="t" x="775" y="359" text-anchor="middle">.mov / .webm</text></g>
+
+  <circle r="4.5" fill="#4a9eff" filter="url(#ga)"><animateMotion dur="3.4s" repeatCount="indefinite" calcMode="linear" path="M170,242 L360,240 L610,240 L690,240"/></circle>
+
+  <text class="cap" x="60" y="450">One frame, three encoders — PNG · linear-DNG with EXIF · H.264 / webm.   <tspan class="acc">verified: ffprobe · ffmpeg</tspan></text>
+</svg>

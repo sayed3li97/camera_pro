@@ -41,3 +41,40 @@ A single conditional export keeps `dart:ffi` / `dart:io` off the web build; the
 browser gets a pure-Dart `WebCameraBackend` with the C kernels ported to Dart.
 
 ![Web pure-Dart split](web-puredart-split.svg)
+
+## Capture paths
+
+One frame, three encoders: PNG via `dart:ui`, a dependency-free linear-DNG
+writer (with EXIF), and video recording — ffprobe / ffmpeg verified.
+
+![Capture paths](capture-paths.svg)
+
+## SIMD across architectures
+
+The histogram kernel has NEON, SSSE3, and scalar paths that produce bit-exact
+output (x86 checked under Rosetta 2 + CI). The honest twist: clang's
+auto-vectorized scalar edges the hand-written NEON on the M1.
+
+![SIMD across architectures](simd-arch.svg)
+
+## Burst + EV bracket
+
+`captureBurst(5)` fires five frames in about 1.2s; `captureExposureBracket`
+takes three at −2 / 0 / +2 EV, with measured mean luminance.
+
+![Burst and EV bracket](burst-bracket.svg)
+
+## CI matrix
+
+`native.yml` runs on every push across macOS, Ubuntu, Windows, and web — every
+✅ in the docs is one of these runs.
+
+![CI matrix](ci-matrix.svg)
+
+## Lock-free buffer pool
+
+Frames ride a ring of pre-allocated, cache-aligned buffers; `acquire`/`release`
+are O(1) lock-free atomics (and `isLeaf` FFI calls), so nothing per-frame hits
+the Dart GC.
+
+![Lock-free buffer pool](buffer-pool-ring.svg)
