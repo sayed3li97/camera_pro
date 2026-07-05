@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1180 520" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Berkeley Mono','JetBrains Mono','SF Mono',ui-monospace,monospace">
+  <title>camera_pro visual-aids pipeline</title>
+  <desc>A preview frame is dispatched to Metal GPU when available or the SIMD CPU core otherwise; both produce byte-identical overlays composited on the live preview.</desc>
+  <defs>
+    <filter id="g3" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3"/></filter>
+    <style>
+      .node{animation:in .5s ease both}@keyframes in{from{opacity:0}to{opacity:1}}
+      .flow{stroke-dasharray:3 9;animation:fl 1.3s linear infinite}@keyframes fl{to{stroke-dashoffset:-24}}
+      .t{fill:#cbd2dc;font-size:15px}.s{fill:#6a7482;font-size:11.5px}
+      .lane{fill:#4b5462;font-size:12px;letter-spacing:2px}.cap{fill:#8b93a1;font-size:14px}.acc{fill:#4a9eff}
+      .chip{fill:#0e131c;stroke:#2a3442}.chl{fill:#9aa3b1;font-size:12px}
+    </style>
+  </defs>
+  <rect width="1180" height="520" rx="18" fill="#0a0d13"/>
+  <rect x="10" y="10" width="1160" height="500" rx="16" fill="none" stroke="#1a2230"/>
+
+  <g class="node" style="animation-delay:.05s">
+    <rect x="52" y="222" width="160" height="66" rx="10" fill="#0e131c" stroke="#4a9eff"/>
+    <text class="t" x="132" y="250" text-anchor="middle">Preview frame</text>
+    <text class="s" x="132" y="270" text-anchor="middle">RGBA</text>
+  </g>
+
+  <path d="M212,246 C 245,246 245,150 285,150" stroke="#37414f" stroke-width="1.4" fill="none"/>
+  <path d="M212,266 C 245,266 245,360 285,360" stroke="#37414f" stroke-width="1.4" fill="none"/>
+  <g class="node" style="animation-delay:.2s">
+    <rect x="285" y="118" width="240" height="64" rx="10" fill="#0e131c" stroke="#4a9eff"/>
+    <text class="t" x="405" y="145" text-anchor="middle">MetalCompute · GPU</text>
+    <text class="s" x="405" y="165" text-anchor="middle">runtime MSL kernels</text>
+  </g>
+  <g class="node" style="animation-delay:.3s">
+    <rect x="285" y="328" width="240" height="64" rx="10" fill="#0e131c" stroke="#2a3442"/>
+    <text class="t" x="405" y="355" text-anchor="middle">NativeCore · CPU</text>
+    <text class="s" x="405" y="375" text-anchor="middle">NEON / SSSE3 SIMD</text>
+  </g>
+  <text class="s" x="405" y="258" text-anchor="middle" fill="#565f6e">GPU if available, else CPU</text>
+  <text x="405" y="278" text-anchor="middle" fill="#3f4756" font-size="11">byte-identical output</text>
+
+  <path d="M525,150 C 565,150 565,246 600,246" stroke="#37414f" stroke-width="1.4" fill="none"/>
+  <path d="M525,360 C 565,360 565,266 600,266" stroke="#37414f" stroke-width="1.4" fill="none"/>
+  <g class="node" style="animation-delay:.45s">
+    <rect x="600" y="222" width="180" height="66" rx="10" fill="#0e131c" stroke="#2a3442"/>
+    <text class="t" x="690" y="250" text-anchor="middle">overlay kernel</text>
+    <text class="s" x="690" y="270" text-anchor="middle">one pass per frame</text>
+  </g>
+
+  <path d="M780,255 H830" stroke="#37414f" stroke-width="1.4" fill="none"/>
+  <g class="node" style="animation-delay:.6s">
+    <g><rect class="chip" x="830" y="120" width="150" height="34" rx="8"/><text class="chl" x="905" y="142" text-anchor="middle">histogram</text></g>
+    <g><rect class="chip" x="830" y="164" width="150" height="34" rx="8"/><text class="chl" x="905" y="186" text-anchor="middle">focus peaking</text></g>
+    <g><rect class="chip" x="830" y="208" width="150" height="34" rx="8"/><text class="chl" x="905" y="230" text-anchor="middle">zebra</text></g>
+    <g><rect class="chip" x="830" y="252" width="150" height="34" rx="8"/><text class="chl" x="905" y="274" text-anchor="middle">false color</text></g>
+    <g><rect class="chip" x="830" y="296" width="150" height="34" rx="8"/><text class="chl" x="905" y="318" text-anchor="middle">waveform</text></g>
+  </g>
+
+  <path d="M980,255 H1010" stroke="#4a9eff" stroke-width="1.4" fill="none" opacity=".6" class="flow"/>
+  <g class="node" style="animation-delay:.75s">
+    <rect x="1010" y="196" width="120" height="120" rx="12" fill="#0e131c" stroke="#2a3442"/>
+    <circle cx="1030" cy="220" r="4" fill="#e0526a"/><text x="1044" y="224" fill="#8b93a1" font-size="10">LIVE</text>
+    <g fill="#2f6bb0"><rect x="1026" y="272" width="6" height="22" rx="1"/><rect x="1040" y="262" width="6" height="32" rx="1"/><rect x="1054" y="252" width="6" height="42" rx="1"/><rect x="1068" y="266" width="6" height="28" rx="1"/><rect x="1082" y="278" width="6" height="16" rx="1"/><rect x="1096" y="258" width="6" height="36" rx="1"/><rect x="1110" y="270" width="6" height="24" rx="1"/></g>
+  </g>
+
+  <circle r="4.5" fill="#4a9eff" filter="url(#g3)">
+    <animateMotion dur="4.4s" repeatCount="indefinite" calcMode="linear" path="M132,255 L285,150 L525,150 L690,255 L1010,255 L1070,255"/>
+  </circle>
+
+  <text class="cap" x="60" y="486">GPU and CPU paths are cross-checked byte-identical.  <tspan class="acc">histogram · peaking · zebra · false color · waveform</tspan></text>
+</svg>

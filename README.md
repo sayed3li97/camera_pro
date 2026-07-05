@@ -25,6 +25,19 @@ Most Flutter camera packages wrap platform APIs directly and surface raw excepti
 
 ---
 
+## Architecture at a glance
+
+A camera frame's path from the sensor, across the single Dart ↔ native FFI
+boundary, up to the live overlay:
+
+![camera_pro architecture — a camera frame crossing the one FFI boundary](doc/diagrams/architecture-ffi-flow.svg)
+
+More animated diagrams — **capability passport → tier**, the **visual-aids
+pipeline**, the **digital manual-control** trick, and the **web pure-Dart
+split** — in **[doc/diagrams/](doc/diagrams/)**. (They animate on GitHub.)
+
+---
+
 ## Feature status
 
 ### Architecture

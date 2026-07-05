@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1180 560" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Berkeley Mono','JetBrains Mono','SF Mono',ui-monospace,monospace">
+  <title>camera_pro architecture: a camera frame crosses one FFI boundary from native to Dart</title>
+  <desc>Bottom lane (native): Camera to HAL backend to C core and Metal. One dashed FFI hop up to the Dart lane: NativeCore, CameraProController, live preview.</desc>
+  <defs>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3.2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <style>
+      .node{animation:nodeIn .55s ease both}
+      @keyframes nodeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+      .flow{stroke-dasharray:3 9;animation:flow 1.3s linear infinite}
+      @keyframes flow{to{stroke-dashoffset:-24}}
+      .t{fill:#cbd2dc;font-size:16px;letter-spacing:.3px}
+      .s{fill:#6a7482;font-size:12px;letter-spacing:.2px}
+      .lane{fill:#4b5462;font-size:12px;letter-spacing:2.5px}
+      .leg{fill:#565f6e;font-size:12px;letter-spacing:.3px}
+      .cap{fill:#8b93a1;font-size:15px}
+      .acc{fill:#4a9eff}
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1180" height="560" rx="18" fill="#0a0d13"/>
+  <rect x="10" y="10" width="1160" height="540" rx="16" fill="none" stroke="#1a2230"/>
+
+  <text class="lane" x="48" y="72">DART</text>
+  <text class="lane" x="48" y="330">NATIVE  ·  C / PLATFORM</text>
+
+  <line x1="42" y1="280" x2="520" y2="280" stroke="#222a39"/>
+  <text x="600" y="284" text-anchor="middle" fill="#3f4756" font-size="11" letter-spacing="2.5" font-family="'JetBrains Mono',ui-monospace,monospace">FFI BOUNDARY</text>
+  <line x1="700" y1="280" x2="1138" y2="280" stroke="#222a39"/>
+
+  <g stroke="#37414f" fill="none" stroke-width="1.4">
+    <path d="M210,393 H240"/>
+    <path d="M460,393 H490"/>
+    <path d="M710,183 H740"/>
+    <path d="M960,183 H990"/>
+  </g>
+  <path d="M600,360 V216" fill="none" stroke="#37414f" stroke-width="1.4" stroke-dasharray="5 5"/>
+  <path d="M600,360 V216" fill="none" stroke="#4a9eff" stroke-width="1.4" opacity=".5" class="flow"/>
+
+  <g class="node" style="animation-delay:.05s">
+    <rect x="60" y="360" width="150" height="66" rx="10" fill="#0e131c" stroke="#4a9eff"/>
+    <text class="t" x="135" y="389" text-anchor="middle">Camera</text>
+    <text class="s" x="135" y="408" text-anchor="middle">sensor</text>
+  </g>
+  <g class="node" style="animation-delay:.15s">
+    <rect x="240" y="360" width="220" height="66" rx="10" fill="#0e131c" stroke="#2a3442"/>
+    <text class="t" x="350" y="386" text-anchor="middle">HAL backend</text>
+    <text class="s" x="350" y="406" text-anchor="middle">AVFoundation · V4L2 · MF · Web</text>
+  </g>
+  <g class="node" style="animation-delay:.25s">
+    <rect x="490" y="360" width="220" height="66" rx="10" fill="#0e131c" stroke="#2a3442"/>
+    <text class="t" x="600" y="386" text-anchor="middle">C core + Metal</text>
+    <text class="s" x="600" y="406" text-anchor="middle">SIMD kernels · DNG · GPU</text>
+  </g>
+
+  <g class="node" style="animation-delay:.4s">
+    <rect x="490" y="150" width="220" height="66" rx="10" fill="#0e131c" stroke="#2a3442"/>
+    <text class="t" x="600" y="176" text-anchor="middle">NativeCore · FFI</text>
+    <text class="s" x="600" y="196" text-anchor="middle">@Native · isLeaf on O(1)</text>
+  </g>
+  <g class="node" style="animation-delay:.5s">
+    <rect x="740" y="150" width="220" height="66" rx="10" fill="#0e131c" stroke="#2a3442"/>
+    <text class="t" x="850" y="176" text-anchor="middle">CameraProController</text>
+    <text class="s" x="850" y="196" text-anchor="middle">capabilities · tiers · errors</text>
+  </g>
+
+  <g class="node" style="animation-delay:.62s">
+    <rect x="990" y="120" width="150" height="150" rx="12" fill="#0e131c" stroke="#2a3442"/>
+    <circle cx="1012" cy="146" r="4" fill="#e0526a"/>
+    <text x="1026" y="150" fill="#8b93a1" font-size="11" font-family="'JetBrains Mono',ui-monospace,monospace">LIVE</text>
+    <rect x="1010" y="168" width="120" height="52" rx="6" fill="#0a0d13" stroke="#232b3a"/>
+    <g fill="#2f6bb0"><rect x="1020" y="196" width="6" height="16" rx="1"/><rect x="1032" y="188" width="6" height="24" rx="1"/><rect x="1044" y="180" width="6" height="32" rx="1"/><rect x="1056" y="190" width="6" height="22" rx="1"/><rect x="1068" y="200" width="6" height="12" rx="1"/><rect x="1080" y="184" width="6" height="28" rx="1"/><rect x="1092" y="194" width="6" height="18" rx="1"/><rect x="1104" y="202" width="6" height="10" rx="1"/></g>
+    <rect x="1010" y="230" width="120" height="8" rx="3" fill="#161c28"/>
+  </g>
+
+  <circle r="5" fill="#4a9eff" filter="url(#glow)">
+    <animateMotion dur="5s" repeatCount="indefinite" calcMode="linear" path="M135,393 L600,393 L600,183 L960,183 L1050,214"/>
+  </circle>
+
+  <text class="leg" x="48" y="512">dashed: the one FFI hop across the Dart ↔ native boundary   ·   solid: same side</text>
+  <text class="cap" x="48" y="540">A camera frame: sensor → C / Metal kernel → live overlay.   <tspan class="acc">camera_pro</tspan></text>
+</svg>

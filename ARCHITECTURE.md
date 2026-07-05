@@ -13,6 +13,11 @@
 > for the full picture — every ✅ there is verified, and the gaps are listed
 > honestly.
 
+![camera_pro architecture — a camera frame crossing the one FFI boundary](doc/diagrams/architecture-ffi-flow.svg)
+
+> More animated diagrams (capability → tier, visual-aids pipeline, digital
+> controls, web split) live in [doc/diagrams/](doc/diagrams/).
+
 ---
 
 ## Table of Contents
