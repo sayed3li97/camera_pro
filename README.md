@@ -46,6 +46,12 @@ split** — in **[doc/diagrams/](doc/diagrams/)**. (They animate on GitHub.)
 
 ## Feature status
 
+Every feature below is a `Capability<T>` — `Supported` (with a range) or
+`NotSupported` (with a reason). `determineTier` turns the whole passport into a
+control tier:
+
+![capability passport → tier](doc/diagrams/capability-passport-tier.svg)
+
 ### Architecture
 
 | Feature | Status | Notes |
@@ -70,6 +76,12 @@ split** — in **[doc/diagrams/](doc/diagrams/)**. (They animate on GitHub.)
 
 ### Manual controls
 
+Where a camera exposes no sensor controls (the macOS built-in camera, most
+browsers), all six controls run through a digital pipeline — so the device
+still reaches `CameraTier.full`:
+
+![digital manual-control pipeline](doc/diagrams/digital-controls.svg)
+
 | Feature | Status | Notes |
 |---|---|---|
 | ISO setter (`setIso`) | ✅ | Capability-guarded; throws `CameraFeatureNotSupportedError` if not supported |
@@ -85,6 +97,11 @@ split** — in **[doc/diagrams/](doc/diagrams/)**. (They animate on GitHub.)
 | Manual controls — web (digital) | ✅ | Browsers expose almost no sensor controls, so the same six controls run through the **pure-Dart** digital pipeline (`NativeCore.adjustPixels`/`digitalZoom`/`boxBlur`). Verified live in Chrome (exposure/zoom/focus visibly change the feed). → `CameraTier.full` |
 
 ### Visual aids
+
+One preview frame is dispatched to the Metal GPU when available or the SIMD CPU
+core otherwise — both produce byte-identical overlays:
+
+![visual-aids pipeline](doc/diagrams/visual-aids-pipeline.svg)
 
 | Feature | Status | Notes |
 |---|---|---|
@@ -102,6 +119,15 @@ split** — in **[doc/diagrams/](doc/diagrams/)**. (They animate on GitHub.)
 | Live camera preview (macOS/iOS) | ✅ | AVFoundation frames → FFI → `dart:ui` (no TextureRegistry needed); verified streaming on real hardware |
 
 ### Capture
+
+One frame, three encoders — PNG, a dependency-free linear-DNG writer (with
+EXIF), and video:
+
+![capture paths](doc/diagrams/capture-paths.svg)
+
+Burst and exposure bracketing run through the same capture path:
+
+![burst and EV bracket](doc/diagrams/burst-bracket.svg)
 
 | Feature | Status | Notes |
 |---|---|---|
@@ -226,6 +252,11 @@ Future<void> main() async {
 
 ## Verified this build
 
+`native.yml` runs on every push across macOS, Ubuntu, Windows, and web — every
+✅ in this README is one of those runs:
+
+![CI matrix](doc/diagrams/ci-matrix.svg)
+
 The following results were produced on macOS arm64 with Flutter 3.44.1 / Dart 3.12.1:
 
 | Test suite | Result |
@@ -249,6 +280,11 @@ The following results were produced on macOS arm64 with Flutter 3.44.1 / Dart 3.
 | dartdoc / `dart pub publish --dry-run` | **0 warnings** each |
 
 ## Web
+
+A single conditional export keeps `dart:ffi`/`dart:io` off the web build; the
+browser gets a pure-Dart `WebCameraBackend` with the C kernels ported to Dart:
+
+![web pure-Dart split](doc/diagrams/web-puredart-split.svg)
 
 The package compiles for the browser: a conditional-import split keeps `dart:ffi`
 and `dart:io` off the web tree, `WebCameraBackend` drives the camera via
@@ -295,6 +331,17 @@ The status card reports **Platform: Web, MediaDevices**, **Kernels: dart**, and
 working exactly as on native.
 
 ## Measured performance
+
+The histogram kernel runs on NEON, SSSE3, and scalar paths — all bit-exact,
+with an honest surprise (clang's auto-vectorized scalar edges the hand-written
+NEON on the M1):
+
+![SIMD across architectures](doc/diagrams/simd-arch.svg)
+
+Frames ride a lock-free, cache-aligned ring, so nothing per-frame hits the Dart
+garbage collector on the hot path:
+
+![lock-free buffer pool](doc/diagrams/buffer-pool-ring.svg)
 
 `src/tests/bench.c`, 1920×1080 RGBA, median of 31 runs, Apple M1 Pro, `-O2`:
 
