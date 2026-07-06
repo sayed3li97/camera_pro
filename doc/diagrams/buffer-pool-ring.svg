@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1180 520" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Berkeley Mono','JetBrains Mono','SF Mono',ui-monospace,monospace">
+  <title>camera_pro lock-free buffer pool</title>
+  <desc>Frames cycle through a ring of pre-allocated, cache-aligned buffers; acquire and release are O(1) lock-free atomics, so no per-frame allocation reaches the Dart garbage collector.</desc>
+  <defs><filter id="gd" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3.5"/></filter>
+    <style>
+      .node{animation:in .6s ease both}@keyframes in{from{opacity:0}to{opacity:1}}
+      .use{animation:use 3.6s linear infinite}@keyframes use{0%,18%{stroke:#4a9eff;fill:#12233a}22%,100%{stroke:#2a3442;fill:#0e131c}}
+      .t{fill:#cbd2dc;font-size:15px}.s{fill:#6a7482;font-size:12px}.cap{fill:#8b93a1;font-size:14px}.acc{fill:#4a9eff}
+      .lane{fill:#4b5462;font-size:12px;letter-spacing:2px}.b{fill:#9aa3b1;font-size:13px}
+    </style>
+  </defs>
+  <rect width="1180" height="520" rx="18" fill="#0a0d13"/>
+  <rect x="10" y="10" width="1160" height="500" rx="16" fill="none" stroke="#1a2230"/>
+
+  <circle cx="360" cy="270" r="150" fill="none" stroke="#1a2230" stroke-dasharray="2 8"/>
+
+  <g class="node" style="animation-delay:.1s"><rect class="use" x="475" y="246" width="48" height="48" rx="8" style="animation-delay:0s"/></g>
+  <g class="node" style="animation-delay:.2s"><rect class="use" x="404" y="369" width="48" height="48" rx="8" style="animation-delay:-.6s"/></g>
+  <g class="node" style="animation-delay:.3s"><rect class="use" x="264" y="369" width="48" height="48" rx="8" style="animation-delay:-1.2s"/></g>
+  <g class="node" style="animation-delay:.4s"><rect class="use" x="197" y="246" width="48" height="48" rx="8" style="animation-delay:-1.8s"/></g>
+  <g class="node" style="animation-delay:.5s"><rect class="use" x="264" y="123" width="48" height="48" rx="8" style="animation-delay:-2.4s"/></g>
+  <g class="node" style="animation-delay:.6s"><rect class="use" x="404" y="123" width="48" height="48" rx="8" style="animation-delay:-3s"/></g>
+
+  <text class="lane" x="360" y="264" text-anchor="middle">RING</text>
+  <text class="s" x="360" y="286" text-anchor="middle">6 × cache-aligned</text>
+
+  <circle r="7" fill="#4a9eff" filter="url(#gd)"><animateMotion dur="3.6s" repeatCount="indefinite" calcMode="linear" path="M360,120 A150,150 0 1,1 359.9,120"/></circle>
+
+  <text class="acc" x="360" y="70" text-anchor="middle" font-size="13">acquire()</text>
+  <text class="s" x="360" y="450" text-anchor="middle">release()</text>
+
+  <g class="node" style="animation-delay:.7s">
+    <text class="t" x="640" y="150">Why a ring?</text>
+    <text class="b" x="640" y="196">· pre-allocated, cache-aligned (64 B)</text>
+    <text class="b" x="640" y="230">· acquire / release: O(1) lock-free atomics</text>
+    <text class="b" x="640" y="264">· the FFI calls are <tspan class="acc">isLeaf</tspan></text>
+    <text class="b" x="640" y="298">· zero per-frame allocation hits the Dart GC</text>
+    <text class="b" x="640" y="332">· producer fills · consumer hands to FFI</text>
+  </g>
+
+  <text class="cap" x="60" y="494">Frames ride the ring, not the heap — no per-frame GC pressure on the hot path.</text>
+</svg>

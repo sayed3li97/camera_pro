@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1180 520" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Berkeley Mono','JetBrains Mono','SF Mono',ui-monospace,monospace">
+  <title>camera_pro web conditional-import split</title>
+  <desc>camera_pro.dart uses a conditional export so the native build gets dart:ffi and the C core, while the web build gets pure Dart with getUserMedia and no dart:ffi or dart:io.</desc>
+  <defs>
+    <filter id="g5" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3"/></filter>
+    <style>
+      .node{animation:in .5s ease both}@keyframes in{from{opacity:0}to{opacity:1}}
+      .t{fill:#cbd2dc;font-size:15px}.s{fill:#6a7482;font-size:11.5px}
+      .lane{fill:#4b5462;font-size:12px;letter-spacing:2px}.cap{fill:#8b93a1;font-size:14px}.acc{fill:#4a9eff}
+      .code{fill:#7f8a99;font-size:12px}.warn{fill:#e0526a;font-size:12px}
+    </style>
+  </defs>
+  <rect width="1180" height="520" rx="18" fill="#0a0d13"/>
+  <rect x="10" y="10" width="1160" height="500" rx="16" fill="none" stroke="#1a2230"/>
+
+  <g class="node" style="animation-delay:.05s">
+    <rect x="470" y="56" width="240" height="60" rx="10" fill="#0e131c" stroke="#4a9eff"/>
+    <text class="t" x="590" y="83" text-anchor="middle">camera_pro.dart</text>
+    <text class="s" x="590" y="102" text-anchor="middle">barrel · conditional export</text>
+  </g>
+
+  <path d="M590,116 V150" stroke="#37414f" stroke-width="1.4" fill="none"/>
+  <text class="code" x="590" y="170" text-anchor="middle">export ... if (dart.library.js_interop) ...</text>
+  <path d="M590,182 L300,224" stroke="#37414f" stroke-width="1.4" fill="none"/>
+  <path d="M590,182 L880,224" stroke="#37414f" stroke-width="1.4" fill="none" stroke-dasharray="5 5"/>
+
+  <text class="lane" x="120" y="214">NATIVE  BUILD</text>
+  <text class="lane" x="770" y="214" fill="#4a9eff">WEB  BUILD</text>
+
+  <g class="node" style="animation-delay:.3s">
+    <rect x="120" y="228" width="360" height="60" rx="10" fill="#0e131c" stroke="#2a3442"/>
+    <text class="t" x="300" y="255" text-anchor="middle">platform_io.dart</text>
+    <text class="s" x="300" y="275" text-anchor="middle">dart:ffi · dart:io</text>
+  </g>
+  <path d="M300,288 V320" stroke="#37414f" stroke-width="1.4" fill="none"/>
+  <g class="node" style="animation-delay:.42s">
+    <rect x="120" y="332" width="360" height="64" rx="10" fill="#0e131c" stroke="#2a3442"/>
+    <text class="t" x="300" y="360" text-anchor="middle">NativeCore (FFI) + C core</text>
+    <text class="s" x="300" y="380" text-anchor="middle">AVFoundation · V4L2 · MF</text>
+  </g>
+
+  <g class="node" style="animation-delay:.36s">
+    <rect x="700" y="228" width="360" height="60" rx="10" fill="#0e131c" stroke="#4a9eff"/>
+    <text class="t" x="880" y="255" text-anchor="middle">platform_web.dart</text>
+    <text class="warn" x="880" y="275" text-anchor="middle">no dart:ffi · no dart:io</text>
+  </g>
+  <path d="M880,288 V320" stroke="#4a9eff" stroke-width="1.4" fill="none" stroke-dasharray="5 5" opacity=".6"/>
+  <g class="node" style="animation-delay:.48s">
+    <rect x="700" y="332" width="360" height="64" rx="10" fill="#0e131c" stroke="#2a3442"/>
+    <text class="t" x="880" y="360" text-anchor="middle">WebCameraBackend · pure Dart</text>
+    <text class="s" x="880" y="380" text-anchor="middle">getUserMedia · ported kernels</text>
+  </g>
+
+  <circle r="4.5" fill="#4a9eff" filter="url(#g5)">
+    <animateMotion dur="3.6s" repeatCount="indefinite" calcMode="linear" path="M590,116 L590,182 L880,224 L880,332"/>
+  </circle>
+
+  <text class="cap" x="60" y="452">One import switch, resolved at compile time.</text>
+  <text class="cap" x="60" y="478">The web build never references  <tspan class="warn">dart:ffi / dart:io</tspan>   ·   same public API on both</text>
+</svg>
