@@ -213,7 +213,7 @@ Until this backend is implemented, `CameraPro.create()` on Linux returns a contr
 ```dart
 final controller = await CameraPro.create(); // uses StubCameraBackend on Linux today
 print(controller.tier);  // CameraTier.basic
-print(CameraPro.nativeCoreVersion);  // "0.0.1" — real FFI call into libcamera_pro_core
+print(CameraPro.nativeCoreVersion);  // "0.0.2" — real FFI call into libcamera_pro_core
 ```
 
 ---

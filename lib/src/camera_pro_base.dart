@@ -17,7 +17,7 @@ import 'platform/default_backend.dart';
 class CameraPro {
   const CameraPro._();
 
-  /// Version of the bundled native core (e.g. "0.0.1"). Reads the FFI core.
+  /// Version of the bundled native core (e.g. "0.0.2"). Reads the FFI core.
   static String get nativeCoreVersion => NativeCore.versionString;
 
   /// The active SIMD kernel in the native core ("NEON", "SSE2", ...).

@@ -1,7 +1,7 @@
 # Troubleshooting — camera_pro
 
 This guide covers known issues, their root causes, and concrete fixes for the
-`camera_pro` package (v0.0.1). Issues are presented as **Problem → Cause → Fix**.
+`camera_pro` package (v0.0.2). Issues are presented as **Problem → Cause → Fix**.
 
 ---
 
@@ -148,10 +148,10 @@ regardless of the device, and all `Capability` fields come back as
 
 **Cause**
 
-Whether this is expected depends on the platform. In v0.0.1 the default backend
+Whether this is expected depends on the platform. In v0.0.2 the default backend
 is selected per target:
 
-| Platform | Default backend in v0.0.1 |
+| Platform | Default backend in v0.0.2 |
 |----------|---------------------------|
 | Apple AVFoundation (macOS/iOS) | ✅ `AppleCameraBackend` — wired, live-verified on real Mac cameras; all six manual controls reach `CameraTier.full` (via the digital pipeline where the sensor exposes no controls) |
 | Web | ✅ `WebCameraBackend` (getUserMedia) — wired, live-verified in Chrome; all six manual controls reach `CameraTier.full` via the pure-Dart digital pipeline |
@@ -167,7 +167,7 @@ supported, which is the correct result for the stub.
 **Fix**
 
 - **On Linux desktop, Windows desktop, or Android** there is nothing to fix;
-  the behavior is correct for v0.0.1. Use `CameraTier.basic` as the trigger to
+  the behavior is correct for v0.0.2. Use `CameraTier.basic` as the trigger to
   display a "limited functionality" banner in your UI, and watch the repository
   for the Dart backend wiring for these platforms (the Linux/Windows C HALs
   already exist and pass the portable lifecycle harness on CI).
@@ -267,7 +267,7 @@ library to be installed separately from the C compiler itself.
   `ffigen.yaml` or as an environment variable.
 
 **Note**: Running `ffigen` is entirely optional. The bindings shipped in
-v0.0.1 (`lib/src/ffi/camera_pro_bindings.dart`) are hand-maintained `@Native`
+v0.0.2 (`lib/src/ffi/camera_pro_bindings.dart`) are hand-maintained `@Native`
 bindings kept 1:1 with `camera_pro_core.h` and regression-tested per symbol, so
 the package builds and works out of the box without libclang. Regeneration via
 `ffigen.yaml` is only relevant if you modify `camera_pro_core.h` and prefer
@@ -323,7 +323,7 @@ try {
 ```
 
 **Tip**: On the stub backend — the fallback on Linux desktop, Windows desktop,
-and Android in v0.0.1 — *all* setters will throw this error because the stub
+and Android in v0.0.2 — *all* setters will throw this error because the stub
 reports no capabilities as supported. This is expected there until the Dart
 backends for those platforms land. On macOS, iOS, and web the wired backends
 report all six manual controls (ISO, shutter, EV, white balance, focus, zoom)
@@ -402,4 +402,4 @@ try {
 
 ---
 
-*Last updated: 2026-07-04 — camera_pro v0.0.1*
+*Last updated: 2026-07-04 — camera_pro v0.0.2*

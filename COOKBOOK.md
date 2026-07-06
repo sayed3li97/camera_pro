@@ -1,6 +1,6 @@
 # camera_pro Cookbook
 
-Practical recipes for working with `camera_pro` v0.0.1. This file is split into two clear sections:
+Practical recipes for working with `camera_pro` v0.0.2. This file is split into two clear sections:
 
 - **Works today** — recipes that are fully implemented, tested, and runnable against the current codebase.
 - **Roadmap recipes** — intended future API shown for design reference. Each is marked 🚧 with an honest status of what exists versus what is still to build.
@@ -9,7 +9,7 @@ Practical recipes for working with `camera_pro` v0.0.1. This file is split into 
 
 ## Project status
 
-`camera_pro` v0.0.1 is a **working camera engine**. The shared C core (SIMD histogram, lock-free buffer pool, YUV→RGBA conversion, focus peaking, zebra, false color, waveform, digital adjust/zoom/blur, linear-DNG writer) and the full Dart control-plane (capability passport, state machine, typed errors, tier selection, controller, burst/bracket, `FrameProcessor` API) are implemented and verified.
+`camera_pro` v0.0.2 is a **working camera engine**. The shared C core (SIMD histogram, lock-free buffer pool, YUV→RGBA conversion, focus peaking, zebra, false color, waveform, digital adjust/zoom/blur, linear-DNG writer) and the full Dart control-plane (capability passport, state machine, typed errors, tier selection, controller, burst/bracket, `FrameProcessor` API) are implemented and verified.
 
 Platform backends: the **Apple AVFoundation backend** (macOS/iOS) is live-verified on real Mac cameras — preview, PNG/RAW capture, H.264 recording, burst, bracketing, multi-camera — with a **Metal GPU** overlay path bit-exact against the C kernels; the **Web backend** (getUserMedia) is live-verified in Chrome with all six manual controls (pure-Dart digital pipeline), RAW/DNG, and MediaRecorder video. The **Linux V4L2** and **Windows Media Foundation** C HALs implement the full 44-function contract and pass a lifecycle harness on CI, but are not yet exposed through a Dart backend (desktop Dart falls back to the conformant stub). **Android** is not started. Recipes below are labelled accordingly.
 
@@ -26,12 +26,12 @@ import 'package:camera_pro/camera_pro.dart';
 
 void printCoreInfo() {
   // Static helpers on CameraPro delegate to NativeCore internally.
-  print(CameraPro.nativeCoreVersion); // e.g. "0.0.1"
+  print(CameraPro.nativeCoreVersion); // e.g. "0.0.2"
   print(CameraPro.simdKernel);        // e.g. "NEON" on Apple Silicon
 
   // Or use NativeCore directly for more detail.
   final core = NativeCore();
-  print(core.versionString); // "0.0.1"
+  print(core.versionString); // "0.0.2"
   print(core.simdName);      // "NEON" | "SSE4.1" | "AVX2" | "SCALAR"
 }
 ```

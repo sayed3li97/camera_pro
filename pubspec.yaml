@@ -2,7 +2,7 @@ name: camera_pro
 description: >-
   DSLR-grade camera controls with a native C/C++ core over Dart FFI. Capability-
   aware, crash-proof API with manual exposure, focus, and white balance.
-version: 0.0.1
+version: 0.0.2
 repository: https://github.com/sayed3li97/camera_pro
 issue_tracker: https://github.com/sayed3li97/camera_pro/issues
 topics:

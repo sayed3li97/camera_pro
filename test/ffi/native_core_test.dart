@@ -26,9 +26,9 @@ void main() {
   }
 
   group('native core FFI', () {
-    test('reports version 0.0.1', () {
-      expect(version, '0.0.1');
-      expect(NativeCore.versionCode, (0 << 16) | (0 << 8) | 1);
+    test('reports version 0.0.2', () {
+      expect(version, '0.0.2');
+      expect(NativeCore.versionCode, (0 << 16) | (0 << 8) | 2);
     });
 
     test('reports an active SIMD kernel', () {

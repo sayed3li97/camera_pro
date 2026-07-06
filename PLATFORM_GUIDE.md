@@ -1,6 +1,6 @@
 # camera_pro — Platform Guide
 
-This document describes the per-platform capabilities, native API mappings, and current implementation status for `camera_pro` v0.0.1. The shared C core and Dart control-plane are complete and verified; the Apple (macOS/iOS) and Web backends are implemented and live-verified; the Linux and Windows C HALs are fully implemented and CI-verified (Dart wiring pending); Android has not been started.
+This document describes the per-platform capabilities, native API mappings, and current implementation status for `camera_pro` v0.0.2. The shared C core and Dart control-plane are complete and verified; the Apple (macOS/iOS) and Web backends are implemented and live-verified; the Linux and Windows C HALs are fully implemented and CI-verified (Dart wiring pending); Android has not been started.
 
 ---
 

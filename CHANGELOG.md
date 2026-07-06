@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-07-07
+
 ### Changed
 
 - **FFI:** marked the O(1) native calls `isLeaf: true` — the introspection
@@ -21,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a pub.dev version badge, CI badge, and install line to the README.
 - Refreshed `ROADMAP.md` stats (80 VM + 65 browser tests; ~375 KB archive;
   marked pub.dev **published**; noted web `MediaRecorder` video recording).
+- Ten animated architecture diagrams (dark / monospace house style) woven
+  through the README, with a `doc/diagrams/` gallery.
+
+### CI
+
+- **Automated pub.dev publishing**: `release.yml` cuts a GitHub Release + tag on
+  every version bump merged to `main` and dispatches `publish.yml`, which uses
+  pub.dev trusted publishing (OIDC — no stored credentials).
 
 ## [0.0.1] - 2026-07-04
 
