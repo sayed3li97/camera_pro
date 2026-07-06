@@ -1,0 +1,89 @@
+# Cuts a GitHub Release + tag on every version bump merged to main, then
+# explicitly dispatches the pub.dev publish workflow against the new tag.
+#
+# Why the explicit dispatch (and not just letting the tag push trigger
+# publish.yml): GitHub Actions will NOT trigger another workflow's `push`
+# listener for a tag/ref created by GITHUB_TOKEN (loop prevention). The
+# workflow_dispatch event is the documented exemption, so we call it directly —
+# and always with the TAG ref, because pub.dev trusted publishing only accepts
+# OIDC tokens whose ref has refType "tag".
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write   # create the release + tag
+  actions: write    # dispatch publish.yml
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history + tags (needed to detect the bump)
+
+      - name: Read version from pubspec.yaml
+        id: ver
+        run: |
+          version="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | head -1 | tr -d '[:space:]')"
+          if [ -z "$version" ]; then echo "::error::could not read version from pubspec.yaml"; exit 1; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version"    >> "$GITHUB_OUTPUT"
+          echo "pubspec version: $version"
+
+      - name: Check whether v${{ steps.ver.outputs.version }} already exists
+        id: check
+        run: |
+          if git rev-parse -q --verify "refs/tags/${{ steps.ver.outputs.tag }}" >/dev/null; then
+            echo "new=false" >> "$GITHUB_OUTPUT"
+            echo "Tag ${{ steps.ver.outputs.tag }} already exists — no version bump, nothing to do."
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+            echo "New version ${{ steps.ver.outputs.version }} detected — releasing."
+          fi
+
+      - name: Extract the CHANGELOG section for this version
+        if: steps.check.outputs.new == 'true'
+        run: |
+          version="${{ steps.ver.outputs.version }}"
+          # Print the block between this version's "## " heading (supports both
+          # "## [1.2.3] - date" and "## 1.2.3" forms) and the next "## " heading.
+          # Exact-match on the version so 0.0.1 never matches 0.0.10.
+          awk -v v="$version" '
+            !started && /^## / {
+              if (index($0, "## [" v "]") == 1 || index($0, "## " v " ") == 1 || \
+                  $0 == "## [" v "]" || $0 == "## " v) { started=1; next }
+            }
+            started && /^## / { exit }
+            started { print }
+          ' CHANGELOG.md | sed '/./,$!d' > RELEASE_NOTES.md
+          if [ ! -s RELEASE_NOTES.md ]; then
+            printf 'Release %s\n' "${{ steps.ver.outputs.tag }}" > RELEASE_NOTES.md
+          fi
+          echo "----- release notes -----"
+          cat RELEASE_NOTES.md
+
+      - name: Create GitHub Release + tag v${{ steps.ver.outputs.version }}
+        if: steps.check.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.ver.outputs.tag }}" \
+            --title "${{ steps.ver.outputs.tag }}" \
+            --notes-file RELEASE_NOTES.md \
+            --target "${{ github.sha }}"
+
+      - name: Trigger pub.dev publish workflow (dispatch on the TAG ref)
+        if: steps.check.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # MUST dispatch against the tag ("v<version>"), never a branch:
+          # pub.dev rejects OIDC tokens with a "branch" refType.
+          # Give the freshly-created tag a moment to be visible to the API.
+          sleep 5
+          gh workflow run publish.yml --ref "${{ steps.ver.outputs.tag }}"
+          echo "Dispatched publish.yml @ ${{ steps.ver.outputs.tag }}"

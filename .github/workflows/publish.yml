@@ -1,0 +1,22 @@
+# Publishes the package to pub.dev via trusted publishing (OIDC — no stored
+# credentials). Runs when a v<major>.<minor>.<patch> tag is pushed, and on
+# explicit workflow_dispatch (which is how release.yml drives it — see the note
+# there about GITHUB_TOKEN not triggering push listeners).
+#
+# pub.dev side: enable "Automated publishing" for this package with tag pattern
+# v{{version}} and both "push" and "workflow_dispatch" events checked
+# (https://pub.dev/packages/camera_pro/admin).
+name: publish
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    permissions:
+      id-token: write   # required for the pub.dev OIDC handshake
+    # Reusable workflow: sets up Dart, performs the OIDC exchange, and runs
+    # `dart pub publish`.
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
