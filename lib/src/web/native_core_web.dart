@@ -20,8 +20,8 @@ int _clampRound(double v) => v < 0 ? 0 : (v > 255 ? 255 : (v + 0.5).toInt());
 class NativeCore {
   const NativeCore._();
 
-  static String get versionString => '0.0.1';
-  static int get versionCode => (0 << 16) | (0 << 8) | 1;
+  static String get versionString => '0.0.2';
+  static int get versionCode => (0 << 16) | (0 << 8) | 2;
 
   /// There is no SIMD/C path on web; kernels run in Dart.
   static String get simdName => 'dart';

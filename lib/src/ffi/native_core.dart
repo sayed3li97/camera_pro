@@ -22,7 +22,7 @@ class NativeCore {
   /// Encoded core version `(major << 16) | (minor << 8) | patch`.
   static int get versionCode => bindings.camera_pro_core_version();
 
-  /// Core version as a string, e.g. "0.0.1".
+  /// Core version as a string, e.g. "0.0.2".
   static String get versionString =>
       bindings.camera_pro_core_version_string().cast<pkg_ffi.Utf8>().toDartString();
 

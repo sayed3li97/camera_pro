@@ -19,7 +19,7 @@ extern "C" {
 /* Encoded as (major << 16) | (minor << 8) | patch. */
 #define CAMERA_PRO_CORE_VERSION_MAJOR 0
 #define CAMERA_PRO_CORE_VERSION_MINOR 0
-#define CAMERA_PRO_CORE_VERSION_PATCH 1
+#define CAMERA_PRO_CORE_VERSION_PATCH 2
 
 /* ── Version / build introspection ─────────────────────────────────────── */
 CAMERA_PRO_EXPORT int32_t     camera_pro_core_version(void);

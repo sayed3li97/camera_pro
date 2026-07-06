@@ -1,6 +1,6 @@
 # Migration Guide: `camera` and `camerawesome` → `camera_pro`
 
-> **Project status (v0.0.1):** The shared C core, Dart control-plane, capability passport, typed errors, and tier system are implemented and verified. Live backends ship for **Apple AVFoundation** (macOS/iOS — live-verified on real Mac cameras) and **Web** (`getUserMedia`, live-verified in Chrome). The **Linux V4L2** and **Windows Media Foundation** C HALs are fully implemented and CI-verified, but are not yet exposed through a Dart backend — desktop Dart on those platforms falls back to the stub. **Android** is 🚧 roadmap. On live platforms this guide describes the **shipping API**; on stub platforms you can structure your migration now and drop in a live backend when it ships. See [Not yet available](#not-yet-available) for the honest gap list.
+> **Project status (v0.0.2):** The shared C core, Dart control-plane, capability passport, typed errors, and tier system are implemented and verified. Live backends ship for **Apple AVFoundation** (macOS/iOS — live-verified on real Mac cameras) and **Web** (`getUserMedia`, live-verified in Chrome). The **Linux V4L2** and **Windows Media Foundation** C HALs are fully implemented and CI-verified, but are not yet exposed through a Dart backend — desktop Dart on those platforms falls back to the stub. **Android** is 🚧 roadmap. On live platforms this guide describes the **shipping API**; on stub platforms you can structure your migration now and drop in a live backend when it ships. See [Not yet available](#not-yet-available) for the honest gap list.
 
 ---
 
@@ -474,7 +474,7 @@ StreamBuilder<CameraState>(
 
 ## Not yet available
 
-> **Important:** In v0.0.1 `CameraPro.create()` returns a **live, verified backend** on macOS/iOS (AVFoundation) and web (`WebCameraBackend` over `getUserMedia`). On **Linux and Windows desktop** the Dart layer still falls back to the **stub HAL** — the C HALs for both platforms are fully implemented and CI-verified, but not yet wired to a Dart `CameraBackend` — and **Android** is not started. The stub:
+> **Important:** In v0.0.2 `CameraPro.create()` returns a **live, verified backend** on macOS/iOS (AVFoundation) and web (`WebCameraBackend` over `getUserMedia`). On **Linux and Windows desktop** the Dart layer still falls back to the **stub HAL** — the C HALs for both platforms are fully implemented and CI-verified, but not yet wired to a Dart `CameraBackend` — and **Android** is not started. The stub:
 >
 > - Returns `CameraCapabilities.unsupported()` for all features.
 > - Reports `CameraTier.basic`.
@@ -500,7 +500,7 @@ StreamBuilder<CameraState>(
 | Burst / bracket / HDR | ✅ burst (5 shots ~1.2 s) and EV bracketing (measured luminance at −2/0/+2) verified; HDR fusion 🚧 roadmap |
 | Frame processors | ✅ `FrameProcessor` plugin API implemented |
 
-**Already implemented and verified** in v0.0.1:
+**Already implemented and verified** in v0.0.2:
 
 - Shared C core: SIMD histogram (NEON + SSSE3 + scalar, bit-exact; x86 verified under Rosetta 2 and on CI), lock-free buffer pool, YUV420P/NV12/NV21→RGBA with NEON fast path (bit-exact), Sobel focus peaking, zebra, false color, waveform, digital adjust/zoom/blur, dependency-free linear-DNG writer with EXIF; 60-check C harness passing on arm64 and x86_64-under-Rosetta.
 - Apple AVFoundation backend, live-verified on real Mac cameras: enumeration, capabilities, live preview over FFI, PNG capture, RAW linear-DNG capture (ffmpeg-verified), H.264 video recording (ffprobe-verified), burst, EV bracketing, multi-camera concurrent open, permission flow. All six manual controls run on macOS through the C digital pipeline → `CameraTier.full`; real iOS sensor controls compile but have not yet run on a physical iPhone.

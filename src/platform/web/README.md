@@ -264,4 +264,4 @@ can be developed and tested without a real browser camera.
 
 ---
 
-*camera_pro v0.0.1 — BSD-3-Clause*
+*camera_pro v0.0.2 — BSD-3-Clause*

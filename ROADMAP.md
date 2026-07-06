@@ -9,7 +9,7 @@ Dart suite (80 VM tests + 65 browser tests), the GPU cross-check harness, CI
 runners (ubuntu/windows/macos/web), Rosetta x86 runs, ffprobe/ffmpeg inspection
 of produced files, or live operation of the example app against real cameras.
 
-**Published:** [pub.dev/packages/camera_pro](https://pub.dev/packages/camera_pro) — v0.0.1.
+**Published:** [pub.dev/packages/camera_pro](https://pub.dev/packages/camera_pro) — v0.0.2.
 
 ---
 
@@ -97,7 +97,7 @@ unverifiable device code).
 | dartdoc | ✅ 0 warnings / 0 errors |
 | `dart pub publish --dry-run` | ✅ 0 warnings (~375 KB archive) |
 | CI (macos/ubuntu/windows/web, every push) | ✅ green |
-| pub.dev publication | ✅ published as **v0.0.1** |
+| pub.dev publication | ✅ published as **v0.0.2** |
 | Localization of error strings | ❌ (English only; messages centralised in `errors.dart` / `camera_pro_error_string`) |
 
 ---
