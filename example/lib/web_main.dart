@@ -222,19 +222,34 @@ class _WebCameraPageState extends State<WebCameraPage> {
     if (controller == null) return;
     try {
       final photo = await controller.capturePhoto();
-      final bytes = photo.bytes;
-      if (bytes == null) return;
-      final c = Completer<ui.Image>();
-      ui.decodeImageFromPixels(
-          bytes, photo.width, photo.height, ui.PixelFormat.rgba8888, c.complete);
-      final img = await c.future;
-      setState(() {
-        _captured?.dispose();
-        _captured = img;
-      });
+      await _showCaptured(photo);
     } on Object catch (e) {
       setState(() => _error = '$e');
     }
+  }
+
+  Future<void> _hdr() async {
+    final controller = _controller;
+    if (controller == null) return;
+    try {
+      final photo = await controller.captureHdr(stops: const <double>[-2, 0, 2]);
+      await _showCaptured(photo);
+    } on Object catch (e) {
+      setState(() => _error = '$e');
+    }
+  }
+
+  Future<void> _showCaptured(CapturedPhoto photo) async {
+    final bytes = photo.bytes;
+    if (bytes == null) return;
+    final c = Completer<ui.Image>();
+    ui.decodeImageFromPixels(
+        bytes, photo.width, photo.height, ui.PixelFormat.rgba8888, c.complete);
+    final img = await c.future;
+    setState(() {
+      _captured?.dispose();
+      _captured = img;
+    });
   }
 
   @override
@@ -328,6 +343,13 @@ class _WebCameraPageState extends State<WebCameraPage> {
                       ? Icons.stop
                       : Icons.fiber_manual_record),
                   label: Text(_recording ? 'Stop' : 'Record'),
+                ),
+                const SizedBox(width: 12),
+                FloatingActionButton.small(
+                  heroTag: 'hdr',
+                  tooltip: 'HDR fusion (-2/0/+2 EV)',
+                  onPressed: _hdr,
+                  child: const Icon(Icons.hdr_on),
                 ),
                 const SizedBox(width: 12),
                 FloatingActionButton.extended(

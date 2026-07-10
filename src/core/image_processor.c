@@ -259,6 +259,12 @@ static inline uint8_t clampf_u8(float v) {
     return (uint8_t)(v + 0.5f);
 }
 
+static inline uint8_t clampd_u8(double v) {
+    if (v < 0.0) return 0;
+    if (v > 255.0) return 255;
+    return (uint8_t)(v + 0.5);
+}
+
 int32_t camera_pro_adjust_pixels(
     uint8_t* px, int32_t width, int32_t height, int32_t stride,
     int32_t is_bgra, float gain, float bias, float temp, float contrast) {
@@ -380,6 +386,63 @@ int32_t camera_pro_box_blur(
     }
 
     free(tmp);
+    return CAMERA_OK;
+}
+
+/* ── HDR exposure fusion (single-scale Mertens) ────────────────────────────
+ * Blends an aligned exposure bracket into one tone-mapped 8-bit image. Each
+ * frame's pixels are weighted by well-exposedness (a Gaussian around mid-grey)
+ * times saturation, then normalised across frames and summed — no HDR
+ * intermediate, the output is a display-ready image directly. `frames` holds
+ * `n` frames back-to-back, each height*stride bytes; `out` is width*height*4.
+ * The three colour channels are weighted symmetrically, so is_bgra does not
+ * change the result. Math is done in double so the C core and the pure-Dart
+ * web port agree to within 1 LSB.
+ * ───────────────────────────────────────────────────────────────────────── */
+int32_t camera_pro_exposure_fusion(
+    const uint8_t* frames, int32_t n, int32_t width, int32_t height,
+    int32_t stride, int32_t is_bgra, uint8_t* out) {
+
+    (void)is_bgra; /* channels weighted symmetrically */
+    if (!frames || !out || n <= 0 || width <= 0 || height <= 0)
+        return CAMERA_ERROR_INVALID_PARAMETER;
+    if (stride <= 0) stride = width * 4;
+
+    const size_t frame_bytes = (size_t)height * stride;
+    /* well-exposedness Gaussian exp(-(v-0.5)^2 / (2*sigma^2)), sigma = 0.2. */
+    const double inv2s2 = 1.0 / (2.0 * 0.2 * 0.2); /* = 12.5 */
+
+    for (int32_t y = 0; y < height; y++) {
+        for (int32_t x = 0; x < width; x++) {
+            const size_t off = (size_t)y * stride + (size_t)x * 4;
+            double wsum = 0.0, a0 = 0.0, a1 = 0.0, a2 = 0.0;
+            for (int32_t k = 0; k < n; k++) {
+                const uint8_t* p = frames + (size_t)k * frame_bytes + off;
+                const double c0 = p[0], c1 = p[1], c2 = p[2];
+                /* well-exposedness: product of per-channel Gaussians (all in
+                 * [0,1]) collapses to one exp of the summed squared errors. */
+                const double z0 = c0 / 255.0 - 0.5;
+                const double z1 = c1 / 255.0 - 0.5;
+                const double z2 = c2 / 255.0 - 0.5;
+                const double we = exp(-(z0 * z0 + z1 * z1 + z2 * z2) * inv2s2);
+                /* saturation = stddev of the three channels, normalised. */
+                const double mean = (c0 + c1 + c2) * (1.0 / 3.0);
+                const double d0 = c0 - mean, d1 = c1 - mean, d2 = c2 - mean;
+                const double sat = sqrt((d0 * d0 + d1 * d1 + d2 * d2) / 3.0) / 255.0;
+                const double w = we * (sat + 0.1) + 1e-12;
+                wsum += w;
+                a0 += w * c0;
+                a1 += w * c1;
+                a2 += w * c2;
+            }
+            const double inv = 1.0 / wsum;
+            uint8_t* o = out + ((size_t)y * width + x) * 4;
+            o[0] = clampd_u8(a0 * inv);
+            o[1] = clampd_u8(a1 * inv);
+            o[2] = clampd_u8(a2 * inv);
+            o[3] = 255;
+        }
+    }
     return CAMERA_OK;
 }
 

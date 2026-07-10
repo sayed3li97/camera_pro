@@ -187,7 +187,7 @@ class WebCameraBackend implements CameraBackend {
       supportsRawCapture: true, // pure-Dart linear-DNG writer
       supportsProRaw: false,
       supportsBurstMode: true, // controller-level, works everywhere
-      supportsHdr: false,
+      supportsHdr: true, // controller-level captureHdr (fusion), works everywhere
       supportsBracketing: true, // controller-level, works everywhere
       supportsDepthCapture: false,
       supportsLidar: false,
@@ -379,6 +379,26 @@ class WebCameraBackend implements CameraBackend {
       format: ImageFormat.png,
       timestamp: ts,
       bytes: frame.bytes,
+    );
+  }
+
+  @override
+  Future<CapturedPhoto> fuseExposures(
+    List<Uint8List> frames, {
+    required int width,
+    required int height,
+    bool isBgra = false,
+  }) async {
+    final fused = NativeCore.exposureFusion(frames,
+        width: width, height: height, isBgra: isBgra);
+    // Web can't write files; return the fused RGBA in memory (the sample app
+    // decodes it via decodeImageFromPixels, same as capturePhoto).
+    return CapturedPhoto(
+      width: width,
+      height: height,
+      format: ImageFormat.png,
+      timestamp: DateTime.now(),
+      bytes: fused,
     );
   }
 

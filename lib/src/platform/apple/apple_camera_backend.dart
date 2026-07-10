@@ -20,6 +20,7 @@ import 'package:ffi/ffi.dart' as pkg_ffi;
 import '../../controller/camera_backend.dart';
 import '../../ffi/camera_pro_bindings.dart' as core;
 import '../../ffi/hal_bindings.dart' as hal;
+import '../../ffi/native_core.dart';
 import '../../models/camera_device.dart';
 import '../../models/capabilities.dart';
 import '../../models/capture_result.dart';
@@ -199,7 +200,7 @@ class AppleCameraBackend implements CameraBackend {
         supportsRawCapture: true,   // linear-DNG via the C core writer
         supportsProRaw: false,
         supportsBurstMode: true,    // controller-level captureBurst
-        supportsHdr: false,
+        supportsHdr: true,          // controller-level captureHdr (fusion)
         supportsBracketing: true,   // controller-level captureExposureBracket
         supportsDepthCapture: false,
         supportsLidar: false,
@@ -490,6 +491,24 @@ class AppleCameraBackend implements CameraBackend {
       timestamp: ts,
       bytes: bytes,
       path: path,
+    );
+  }
+
+  @override
+  Future<CapturedPhoto> fuseExposures(
+    List<Uint8List> frames, {
+    required int width,
+    required int height,
+    bool isBgra = true,
+  }) async {
+    final fused = NativeCore.exposureFusion(frames,
+        width: width, height: height, isBgra: isBgra);
+    final ts = DateTime.now();
+    return _encodePng(
+      PreviewFrame(
+          bytes: fused, width: width, height: height, isBgra: isBgra),
+      '${Directory.systemTemp.path}/camera_pro_hdr_${ts.millisecondsSinceEpoch}.png',
+      ts,
     );
   }
 

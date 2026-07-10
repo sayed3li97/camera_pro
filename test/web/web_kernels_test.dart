@@ -168,5 +168,52 @@ void main() {
       }
       expect(marked, greaterThan(0), reason: 'edge pixels highlighted');
     });
+
+    test('exposure fusion lifts shadows and recovers highlights', () {
+      // 2-pixel scene, 3-frame bracket: the shadow pixel is only well-exposed
+      // in the bright frame, the highlight only in the dark frame.
+      const w = 2, h = 1;
+      Uint8List frame(int shadow, int highlight) {
+        final b = Uint8List(w * h * 4);
+        b[0] = b[1] = b[2] = shadow;
+        b[3] = 255;
+        b[4] = b[5] = b[6] = highlight;
+        b[7] = 255;
+        return b;
+      }
+
+      final fused = NativeCore.exposureFusion(
+        <Uint8List>[frame(0, 150), frame(30, 230), frame(110, 255)],
+        width: w,
+        height: h,
+        isBgra: false,
+      );
+      expect(fused[0], greaterThan(90)); // shadow lifted toward 110
+      expect(fused[4], lessThan(180)); // highlight recovered toward 150
+      expect(fused[3], 255);
+    });
+
+    test('exposure fusion preserves channel order on a colored bracket', () {
+      // A saturated orange bracket — pins channel order and saturation, which a
+      // grayscale test (R=G=B) can't distinguish.
+      Uint8List frame(int r, int g, int b) {
+        final px = Uint8List(4);
+        px[0] = r;
+        px[1] = g;
+        px[2] = b;
+        px[3] = 255;
+        return px;
+      }
+
+      final fused = NativeCore.exposureFusion(
+        <Uint8List>[frame(40, 24, 12), frame(200, 120, 60), frame(255, 200, 150)],
+        width: 1,
+        height: 1,
+        isBgra: false,
+      );
+      expect(fused[0], greaterThan(fused[1])); // R > G
+      expect(fused[1], greaterThan(fused[2])); // G > B
+      expect(fused[0], greaterThan(150));
+    });
   });
 }

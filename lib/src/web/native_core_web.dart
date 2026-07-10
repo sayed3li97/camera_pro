@@ -7,6 +7,7 @@
 /// et al. working identically on web and native.
 library;
 
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../processing/histogram.dart';
@@ -345,6 +346,61 @@ class NativeCore {
         px[d + 3] = s3 ~/ count;
       }
     }
+  }
+
+  /// Pure-Dart port of `camera_pro_exposure_fusion` — single-scale Mertens
+  /// exposure fusion. Blends an aligned exposure bracket ([frames], same-sized
+  /// tightly-packed RGBA/BGRA buffers) into one tone-mapped image. Computed in
+  /// double to stay within 1 LSB of the C core (which the FFI test cross-checks).
+  static Uint8List exposureFusion(
+    List<Uint8List> frames, {
+    required int width,
+    required int height,
+    bool isBgra = true,
+  }) {
+    if (frames.isEmpty) {
+      throw ArgumentError('exposureFusion needs at least one frame');
+    }
+    final n = frames.length;
+    final frameBytes = width * height * 4;
+    for (final f in frames) {
+      if (f.length != frameBytes) {
+        throw ArgumentError(
+            'exposureFusion: every frame must be $frameBytes bytes '
+            '(${width}x$height RGBA); got ${f.length}');
+      }
+    }
+    final out = Uint8List(frameBytes);
+    const inv2s2 = 1.0 / (2.0 * 0.2 * 0.2); // = 12.5
+    final pixels = width * height;
+    for (var i = 0; i < pixels; i++) {
+      final o = i * 4;
+      var wsum = 0.0, a0 = 0.0, a1 = 0.0, a2 = 0.0;
+      for (var k = 0; k < n; k++) {
+        final f = frames[k];
+        final c0 = f[o].toDouble();
+        final c1 = f[o + 1].toDouble();
+        final c2 = f[o + 2].toDouble();
+        final z0 = c0 / 255.0 - 0.5;
+        final z1 = c1 / 255.0 - 0.5;
+        final z2 = c2 / 255.0 - 0.5;
+        final we = math.exp(-(z0 * z0 + z1 * z1 + z2 * z2) * inv2s2);
+        final mean = (c0 + c1 + c2) / 3.0;
+        final d0 = c0 - mean, d1 = c1 - mean, d2 = c2 - mean;
+        final sat = math.sqrt((d0 * d0 + d1 * d1 + d2 * d2) / 3.0) / 255.0;
+        final w = we * (sat + 0.1) + 1e-12;
+        wsum += w;
+        a0 += w * c0;
+        a1 += w * c1;
+        a2 += w * c2;
+      }
+      final inv = 1.0 / wsum;
+      out[o] = _clampRound(a0 * inv);
+      out[o + 1] = _clampRound(a1 * inv);
+      out[o + 2] = _clampRound(a2 * inv);
+      out[o + 3] = 255;
+    }
+    return out;
   }
 }
 

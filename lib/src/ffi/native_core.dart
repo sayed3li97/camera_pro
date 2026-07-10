@@ -240,6 +240,44 @@ class NativeCore {
       pkg_ffi.malloc.free(buf);
     }
   }
+
+  /// Fuses an aligned exposure bracket into one tone-mapped RGBA image using
+  /// single-scale Mertens exposure fusion. [frames] must be same-sized,
+  /// tightly-packed RGBA/BGRA buffers (`width*height*4` bytes each). Returns a
+  /// new RGBA/BGRA buffer in the same channel order as the input.
+  static Uint8List exposureFusion(
+    List<Uint8List> frames, {
+    required int width,
+    required int height,
+    bool isBgra = true,
+  }) {
+    if (frames.isEmpty) {
+      throw ArgumentError('exposureFusion needs at least one frame');
+    }
+    final n = frames.length;
+    final frameBytes = width * height * 4;
+    for (final f in frames) {
+      if (f.length != frameBytes) {
+        throw ArgumentError(
+            'exposureFusion: every frame must be $frameBytes bytes '
+            '(${width}x$height RGBA); got ${f.length}');
+      }
+    }
+    final src = pkg_ffi.malloc<ffi.Uint8>(frameBytes * n);
+    final out = pkg_ffi.malloc<ffi.Uint8>(frameBytes);
+    try {
+      final srcList = src.asTypedList(frameBytes * n);
+      for (var i = 0; i < n; i++) {
+        srcList.setAll(i * frameBytes, frames[i]);
+      }
+      bindings.camera_pro_exposure_fusion(
+          src, n, width, height, width * 4, isBgra ? 1 : 0, out);
+      return Uint8List.fromList(out.asTypedList(frameBytes));
+    } finally {
+      pkg_ffi.malloc.free(src);
+      pkg_ffi.malloc.free(out);
+    }
+  }
 }
 
 /// A managed handle to a native ring buffer pool.

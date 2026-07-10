@@ -12,7 +12,7 @@ A Flutter camera package built on a shared C/C++ core with a crash-proof Dart AP
 
 > **Project status: working camera engine (v0.0.2, pre-release)**
 >
-> On macOS the example app opens the real camera and does live preview, all six manual controls, five live visual-aid overlays (histogram, focus peaking, zebra, false color, waveform — GPU-accelerated via Metal where available), PNG + RAW/DNG capture with EXIF, burst, EV bracketing, and H.264 video recording — every one of those verified live against real hardware. The same AVFoundation backend compiles for iOS with sensor-level manual controls. **Web** runs in the browser too: a getUserMedia backend with live preview, capture, and the visual aids reimplemented in pure Dart — verified in Chrome with screenshots ([see below](#web)). Linux (V4L2) and Windows (Media Foundation) backends implement the full HAL contract and pass CI on real ubuntu/windows runners (camera-hardware runtime pending machines with cameras). Android is not started — see [ROADMAP.md](ROADMAP.md) for the honest gate on every remaining item.
+> On macOS the example app opens the real camera and does live preview, all six manual controls, five live visual-aid overlays (histogram, focus peaking, zebra, false color, waveform — GPU-accelerated via Metal where available), PNG + RAW/DNG capture with EXIF, burst, EV bracketing, HDR exposure fusion, and H.264 video recording — every one of those verified live against real hardware. The same AVFoundation backend compiles for iOS with sensor-level manual controls. **Web** runs in the browser too: a getUserMedia backend with live preview, capture, and the visual aids reimplemented in pure Dart — verified in Chrome with screenshots ([see below](#web)). Linux (V4L2) and Windows (Media Foundation) backends implement the full HAL contract and pass CI on real ubuntu/windows runners (camera-hardware runtime pending machines with cameras). Android is not started — see [ROADMAP.md](ROADMAP.md) for the honest gate on every remaining item.
 
 ---
 
@@ -129,6 +129,20 @@ Burst and exposure bracketing run through the same capture path:
 
 ![burst and EV bracket](doc/diagrams/burst-bracket.svg)
 
+`captureHdr()` takes that bracket one step further: it captures the frames and
+fuses them into a single tone-mapped image with single-scale [Mertens exposure
+fusion](https://en.wikipedia.org/wiki/Exposure_fusion) — per pixel it weights
+each exposure by well-exposedness and saturation, so shadows are pulled from the
+brighter frame and highlights from the darker one. The C core and the pure-Dart
+web port agree to within 1 LSB (cross-checked in the test suite).
+
+![HDR exposure fusion](doc/diagrams/hdr-fusion.svg)
+
+Verified live on the FaceTime HD camera in a dark room: the single mid-exposure
+frame was **77% crushed black** (mean luma 9), while the fused result had **0%
+crushed shadows** (mean luma 94) — the subject, invisible in one exposure, fully
+recovered in the fusion.
+
 | Feature | Status | Notes |
 |---|---|---|
 | `capturePhoto()` API surface | ✅ | Method exists, capability-guarded, typed error on failure |
@@ -137,7 +151,8 @@ Burst and exposure bracketing run through the same capture path:
 | RAW/DNG capture | ✅ | Dependency-free linear-DNG writer with EXIF; ffmpeg-verified from the real camera |
 | EXIF embedding | ✅ | ISO, exposure time, timestamps in the DNG's EXIF IFD |
 | libjpeg-turbo integration | — | Skipped by design (PNG via dart:ui + DNG cover stills) |
-| Burst / EV bracket | ✅ | Verified: 5-shot burst ~1.2s; bracket YAVG 25.8/96.9/183.4. HDR fusion ❌ |
+| Burst / EV bracket | ✅ | Verified: 5-shot burst ~1.2s; bracket YAVG 25.8/96.9/183.4 |
+| HDR exposure fusion | ✅ | `captureHdr()` fuses a bracket (Mertens). Verified live: a 77%-black frame → mean-luma 94, 0% crushed |
 
 ### Video
 

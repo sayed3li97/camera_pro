@@ -12,6 +12,8 @@ import 'dart:typed_data';
 import 'package:camera_pro/camera_pro.dart';
 // ignore: implementation_imports
 import 'package:camera_pro/src/ffi/camera_pro_bindings.dart' as bindings;
+// ignore: implementation_imports
+import 'package:camera_pro/src/web/native_core_web.dart' as webcore;
 import 'package:ffi/ffi.dart' as pkg_ffi;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -170,6 +172,100 @@ void main() {
         pkg_ffi.malloc.free(cStr);
         pkg_ffi.malloc.free(cTime);
       }
+    });
+
+    test('exposure fusion lifts shadows and recovers highlights', () {
+      // A 2-pixel scene captured as a 3-frame bracket. The shadow pixel is only
+      // well-exposed in the bright frame; the highlight only in the dark frame.
+      const w = 2, h = 1;
+      Uint8List frame(int shadow, int highlight) {
+        final b = Uint8List(w * h * 4);
+        b[0] = b[1] = b[2] = shadow;
+        b[3] = 255;
+        b[4] = b[5] = b[6] = highlight;
+        b[7] = 255;
+        return b;
+      }
+
+      final bracket = <Uint8List>[
+        frame(0, 150), // dark
+        frame(30, 230), // mid
+        frame(110, 255), // bright
+      ];
+      final fused = NativeCore.exposureFusion(bracket,
+          width: w, height: h, isBgra: false);
+      // Shadow (mid=30) is pulled up toward the bright frame's 110.
+      expect(fused[0], greaterThan(90));
+      // Highlight (mid=230) is pulled down toward the dark frame's 150.
+      expect(fused[4], lessThan(180));
+      expect(fused[3], 255);
+      expect(fused[7], 255);
+    });
+
+    test('exposure fusion preserves channel order (not grayscale)', () {
+      // A saturated orange bracket (R > G > B). If the kernel swapped output
+      // channels or dropped saturation weighting, a grayscale test could not
+      // tell — this pins the color through.
+      const w = 2, h = 1;
+      Uint8List frame(int r, int g, int b) {
+        final px = Uint8List(w * h * 4);
+        for (var i = 0; i < w * h; i++) {
+          px[i * 4] = r;
+          px[i * 4 + 1] = g;
+          px[i * 4 + 2] = b;
+          px[i * 4 + 3] = 255;
+        }
+        return px;
+      }
+
+      final fused = NativeCore.exposureFusion(
+        <Uint8List>[frame(40, 24, 12), frame(200, 120, 60), frame(255, 200, 150)],
+        width: w,
+        height: h,
+        isBgra: false,
+      );
+      expect(fused[0], greaterThan(fused[1])); // R > G
+      expect(fused[1], greaterThan(fused[2])); // G > B
+      expect(fused[0], greaterThan(150)); // red stays dominant
+    });
+
+    test('exposure fusion rejects mismatched frame sizes', () {
+      final ok = Uint8List(2 * 2 * 4);
+      final wrong = Uint8List(2 * 2 * 4 - 4);
+      expect(
+        () => NativeCore.exposureFusion(<Uint8List>[ok, wrong],
+            width: 2, height: 2),
+        throwsArgumentError,
+      );
+    });
+
+    test('exposure fusion: C core and pure-Dart port agree within 1 LSB', () {
+      // Cross-check the FFI kernel against the byte-for-byte web port on a
+      // pseudo-random bracket (fixed seed => deterministic).
+      const w = 24, h = 16, n = 3;
+      var seed = 0x51ED;
+      int rnd() => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) >> 8 & 0xff;
+      final bracket = List<Uint8List>.generate(n, (_) {
+        final b = Uint8List(w * h * 4);
+        for (var i = 0; i < w * h; i++) {
+          b[i * 4] = rnd();
+          b[i * 4 + 1] = rnd();
+          b[i * 4 + 2] = rnd();
+          b[i * 4 + 3] = 255;
+        }
+        return b;
+      });
+      final c = NativeCore.exposureFusion(bracket, width: w, height: h);
+      final dart =
+          webcore.NativeCore.exposureFusion(bracket, width: w, height: h);
+      expect(dart.length, c.length);
+      var maxDiff = 0;
+      for (var i = 0; i < c.length; i++) {
+        final d = (c[i] - dart[i]).abs();
+        if (d > maxDiff) maxDiff = d;
+      }
+      expect(maxDiff, lessThanOrEqualTo(1),
+          reason: 'C vs Dart fusion diverged by $maxDiff LSB');
     });
 
     test('buffer pool acquires, drains, and releases', () {

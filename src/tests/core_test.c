@@ -307,6 +307,52 @@ static void test_adjustments(void) {
     free(px);
 }
 
+static void test_exposure_fusion(void) {
+    printf("HDR exposure fusion\n");
+    const int32_t W = 2, H = 1, stride = W * 4;
+    const size_t fb = (size_t)stride * H;  /* 8 bytes per frame */
+    /* Three-frame bracket of a 2-pixel scene. The shadow pixel is only
+     * well-exposed in the bright frame; the highlight pixel only in the dark
+     * frame — so a correct fusion must pull detail from opposite exposures.
+     *   pixel 0 (shadow):    dark=0,   mid=30,  bright=110
+     *   pixel 1 (highlight): dark=150, mid=230, bright=255                    */
+    uint8_t frames[3 * 8];
+    memset(frames, 0, sizeof(frames));
+    const uint8_t shadow[3]    = {0, 30, 110};
+    const uint8_t highlight[3] = {150, 230, 255};
+    for (int k = 0; k < 3; k++) {
+        uint8_t* f = frames + (size_t)k * fb;
+        f[0] = f[1] = f[2] = shadow[k];    f[3] = 255; /* pixel 0 */
+        f[4] = f[5] = f[6] = highlight[k]; f[7] = 255; /* pixel 1 */
+    }
+    uint8_t out[8] = {0};
+    int32_t rc = camera_pro_exposure_fusion(frames, 3, W, H, stride, 0, out);
+    CHECK(rc == CAMERA_OK, "fusion returns OK");
+    CHECK(out[3] == 255 && out[7] == 255, "alpha stays opaque");
+    /* Shadow pixel is lifted toward the well-exposed bright frame (~110). */
+    CHECK(out[0] > 90, "shadow detail lifted from the bright exposure");
+    /* Highlight pixel is pulled down toward the well-exposed dark frame (~150). */
+    CHECK(out[4] < 180, "highlight detail recovered from the dark exposure");
+    /* Net effect: the two patches, 200 apart in the mid frame, end up much
+     * closer — the scene's dynamic range is compressed into the display range. */
+    CHECK(((int)out[4] - (int)out[0]) < (230 - 30),
+          "dynamic range compressed vs the mid exposure");
+
+    /* Single-frame fusion is the identity (within rounding). */
+    uint8_t out1[8] = {0};
+    CHECK(camera_pro_exposure_fusion(frames + fb, 1, W, H, stride, 0, out1)
+              == CAMERA_OK, "single-frame fusion returns OK");
+    CHECK(out1[0] == 30 && out1[4] == 230, "single-frame fusion is the identity");
+
+    /* Parameter validation. */
+    CHECK(camera_pro_exposure_fusion(NULL, 3, W, H, stride, 0, out)
+              == CAMERA_ERROR_INVALID_PARAMETER, "null frames rejected");
+    CHECK(camera_pro_exposure_fusion(frames, 0, W, H, stride, 0, out)
+              == CAMERA_ERROR_INVALID_PARAMETER, "n=0 rejected");
+    CHECK(camera_pro_exposure_fusion(frames, 3, W, H, stride, 0, NULL)
+              == CAMERA_ERROR_INVALID_PARAMETER, "null out rejected");
+}
+
 static void test_dng_writer(void) {
     printf("DNG writer\n");
     const int32_t W = 32, H = 24, stride = W * 4;
@@ -366,6 +412,7 @@ int main(void) {
     test_visual_aids();
     test_waveform_falsecolor();
     test_adjustments();
+    test_exposure_fusion();
     test_dng_writer();
     test_hal_stub();
     printf("\n=== %d checks, %d failures ===\n", g_checks, g_failures);

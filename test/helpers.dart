@@ -1,4 +1,6 @@
 // Shared test fixtures.
+import 'dart:typed_data';
+
 import 'package:camera_pro/camera_pro.dart';
 
 /// A capability passport for a high-end device (full manual controls).
@@ -117,6 +119,13 @@ CameraCapabilities standardCapabilities() => CameraCapabilities(
 class RecordingBackend implements CameraBackend {
   final List<String> calls = <String>[];
 
+  /// The frame [latestFrame] returns; tests set it to exercise capture paths.
+  PreviewFrame? frame;
+
+  /// If non-empty, [latestFrame] dequeues from here first (lets a test feed a
+  /// changing sequence of frames, e.g. a mid-bracket resolution change).
+  final List<PreviewFrame> frameQueue = <PreviewFrame>[];
+
   @override
   Future<CameraList> enumerateDevices() async => const CameraList(<CameraDevice>[
         CameraDevice(index: 0, name: 'fake', direction: LensDirection.back),
@@ -141,7 +150,8 @@ class RecordingBackend implements CameraBackend {
   Future<void> stopFrameStream() async => calls.add('stopFrameStream');
 
   @override
-  PreviewFrame? latestFrame() => null;
+  PreviewFrame? latestFrame() =>
+      frameQueue.isNotEmpty ? frameQueue.removeAt(0) : frame;
 
   @override
   int get frameCount => 0;
@@ -189,6 +199,24 @@ class RecordingBackend implements CameraBackend {
       format: format ?? ImageFormat.jpeg,
       timestamp: DateTime(2026),
       path: '/tmp/photo.jpg',
+    );
+  }
+
+  @override
+  Future<CapturedPhoto> fuseExposures(
+    List<Uint8List> frames, {
+    required int width,
+    required int height,
+    bool isBgra = true,
+  }) async {
+    calls.add('fuse:${frames.length}:${width}x$height');
+    return CapturedPhoto(
+      width: width,
+      height: height,
+      format: ImageFormat.png,
+      timestamp: DateTime(2026),
+      bytes: frames.isEmpty ? null : frames.first,
+      path: '/tmp/hdr.png',
     );
   }
 

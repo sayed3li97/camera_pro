@@ -81,6 +81,17 @@ abstract interface class CameraBackend {
 
   // ── Capture ──
   Future<CapturedPhoto> capturePhoto({ImageFormat? format});
+
+  /// Fuses an aligned exposure bracket ([frames], same-sized RGBA/BGRA buffers)
+  /// into one tone-mapped still and encodes it with this backend's still
+  /// encoder. Used by the controller's HDR capture path.
+  Future<CapturedPhoto> fuseExposures(
+    List<Uint8List> frames, {
+    required int width,
+    required int height,
+    bool isBgra = true,
+  });
+
   Future<void> startVideoRecording(String path);
   Future<VideoResult> stopVideoRecording();
 
@@ -160,6 +171,15 @@ class StubCameraBackend implements CameraBackend {
   @override
   Future<CapturedPhoto> capturePhoto({ImageFormat? format}) async =>
       _unsupported('capturePhoto');
+
+  @override
+  Future<CapturedPhoto> fuseExposures(
+    List<Uint8List> frames, {
+    required int width,
+    required int height,
+    bool isBgra = true,
+  }) async =>
+      _unsupported('fuseExposures');
 
   @override
   Future<void> startVideoRecording(String path) async => _unsupported('recording');

@@ -64,6 +64,15 @@ takes three at −2 / 0 / +2 EV, with measured mean luminance.
 
 ![Burst and EV bracket](burst-bracket.svg)
 
+## HDR exposure fusion
+
+`captureHdr()` brackets, then fuses the frames into one tone-mapped image with
+single-scale Mertens fusion — shadows pulled from the bright frame, highlights
+from the dark. Verified live: a 77%-crushed-black frame → 0% crushed, mean luma
+9 → 94.
+
+![HDR exposure fusion](hdr-fusion.svg)
+
 ## CI matrix
 
 `native.yml` runs on every push across macOS, Ubuntu, Windows, and web — every

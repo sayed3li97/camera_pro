@@ -57,7 +57,7 @@ unverifiable device code).
 | Live histogram / focus peaking / zebra / false color / waveform | ✅ all five live overlays |
 | RAW/DNG + EXIF (ISO, exposure, timestamps) | ✅ no libtiff/libexif needed |
 | Burst / EV bracketing | ✅ |
-| HDR fusion (merge brackets into one image) | ❌ (brackets are captured; fusion algorithm not written) |
+| HDR fusion (merge brackets into one image) | ✅ `captureHdr()` — single-scale Mertens fusion in the C core + pure-Dart web port; verified live (77%-black frame → mean-luma 94, 0% crushed) |
 | libjpeg-turbo | skipped by design — PNG via dart:ui + DNG cover stills today |
 
 ## Phase 5 — GPU Visual Aids ✅ Metal · ⛔ others
@@ -111,4 +111,4 @@ unverifiable device code).
 | Linux/Windows camera runtime validation | machines with cameras (CI validates compile + lifecycle) |
 | Streaming transport | RTMP/SRT client implementation + an endpoint to verify against |
 | Web WebGPU compute path | pure engineering — CPU pure-Dart kernels ship today; WebGPU is an optimization |
-| HDR fusion, HEVC/ProRes selection, texture-based preview, ffigen swap | pure engineering time — no hardware gate |
+| HEVC/ProRes selection, texture-based preview, ffigen swap | pure engineering time — no hardware gate (HDR fusion ✅ shipped) |
