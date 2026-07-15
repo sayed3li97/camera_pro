@@ -215,5 +215,38 @@ void main() {
       expect(fused[1], greaterThan(fused[2])); // G > B
       expect(fused[0], greaterThan(150));
     });
+
+    test('local tone mapping lifts shadows and tames highlights', () {
+      // High-DR frame with fine stripe texture (local contrast to adapt to).
+      const w = 32, h = 16;
+      final frame = Uint8List(w * h * 4);
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          final base = x < w ~/ 2 ? 28 : 224;
+          final v = (y & 2) != 0 ? base + 12 : base - 12;
+          final o = (y * w + x) * 4;
+          frame[o] = frame[o + 1] = frame[o + 2] = v;
+          frame[o + 3] = 255;
+        }
+      }
+      final out =
+          NativeCore.localTonemap(frame, width: w, height: h, isBgra: false);
+      var inDark = 0, outDark = 0, inBright = 0, outBright = 0;
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          final o = (y * w + x) * 4;
+          if (x < w ~/ 2) {
+            inDark += frame[o];
+            outDark += out[o];
+          } else {
+            inBright += frame[o];
+            outBright += out[o];
+          }
+        }
+      }
+      expect(outDark, greaterThan(inDark));
+      expect(outBright, lessThan(inBright));
+      expect(out[3], 255);
+    });
   });
 }

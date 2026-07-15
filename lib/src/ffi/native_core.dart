@@ -278,6 +278,43 @@ class NativeCore {
       pkg_ffi.malloc.free(out);
     }
   }
+
+  /// Tone-maps a single RGBA/BGRA [frame] by synthesizing an exposure stack
+  /// from it (gain = 2^ev, in linear light, for each ev in [stops]) and running
+  /// multi-scale exposure fusion. Ghost-free — every synthetic exposure comes
+  /// from the same instant. Returns a new same-order buffer.
+  static Uint8List localTonemap(
+    Uint8List frame, {
+    required int width,
+    required int height,
+    bool isBgra = true,
+    List<double> stops = const <double>[-3.0, -1.5, 0.0, 1.5, 3.0],
+  }) {
+    final frameBytes = width * height * 4;
+    if (frame.length != frameBytes) {
+      throw ArgumentError('localTonemap: frame must be $frameBytes bytes '
+          '(${width}x$height RGBA); got ${frame.length}');
+    }
+    if (stops.isEmpty) throw ArgumentError('localTonemap needs >= 1 stop');
+    final n = stops.length;
+    final src = pkg_ffi.malloc<ffi.Uint8>(frameBytes);
+    final evs = pkg_ffi.malloc<ffi.Float>(n);
+    final out = pkg_ffi.malloc<ffi.Uint8>(frameBytes);
+    try {
+      src.asTypedList(frameBytes).setAll(0, frame);
+      final el = evs.asTypedList(n);
+      for (var i = 0; i < n; i++) {
+        el[i] = stops[i];
+      }
+      bindings.camera_pro_local_tonemap(
+          src, width, height, width * 4, isBgra ? 1 : 0, evs, n, out);
+      return Uint8List.fromList(out.asTypedList(frameBytes));
+    } finally {
+      pkg_ffi.malloc.free(src);
+      pkg_ffi.malloc.free(evs);
+      pkg_ffi.malloc.free(out);
+    }
+  }
 }
 
 /// A managed handle to a native ring buffer pool.

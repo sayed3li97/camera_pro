@@ -353,6 +353,49 @@ static void test_exposure_fusion(void) {
               == CAMERA_ERROR_INVALID_PARAMETER, "null out rejected");
 }
 
+static void test_local_tonemap(void) {
+    printf("Local tone mapping (single frame)\n");
+    const int32_t W = 48, H = 48, stride = W * 4;
+    uint8_t* px = (uint8_t*)malloc((size_t)stride * H);
+    uint8_t* out = (uint8_t*)malloc((size_t)stride * H);
+    /* A single high-dynamic-range frame: dark | mid | bright vertical bands,
+     * each carrying a ±15 stripe texture (real scenes are never perfectly flat,
+     * and local tone mapping adapts through local contrast). A plain exposure
+     * crushes the dark band and clips the bright one. */
+    for (int32_t y = 0; y < H; y++)
+        for (int32_t x = 0; x < W; x++) {
+            int base = x < W / 3 ? 30 : (x < 2 * W / 3 ? 128 : 225);
+            int v = (y & 2) ? base + 15 : base - 15;
+            uint8_t* p = px + ((size_t)y * W + x) * 4;
+            p[0] = p[1] = p[2] = (uint8_t)v; p[3] = 255;
+        }
+    float evs[5] = {-3.f, -1.5f, 0.f, 1.5f, 3.f};
+    CHECK(camera_pro_local_tonemap(px, W, H, stride, 0, evs, 5, out) == CAMERA_OK,
+          "tonemap returns OK");
+    /* Compare region means: the shadow band should rise, the highlight fall. */
+    long in_dark = 0, out_dark = 0, in_bright = 0, out_bright = 0;
+    int nd = 0, nb = 0;
+    for (int32_t y = 0; y < H; y++)
+        for (int32_t x = 0; x < W; x++) {
+            size_t i = ((size_t)y * W + x) * 4;
+            if (x < W / 3) { in_dark += px[i]; out_dark += out[i]; nd++; }
+            else if (x >= 2 * W / 3) { in_bright += px[i]; out_bright += out[i]; nb++; }
+        }
+    CHECK(out[3] == 255, "alpha opaque");
+    CHECK(out_dark / nd > in_dark / nd, "shadow band lifted (region mean)");
+    CHECK(out_bright / nb < in_bright / nb, "highlight band compressed (region mean)");
+    CHECK((out_bright - out_dark) / nb < (in_bright - in_dark) / nb,
+          "single-frame dynamic range compressed");
+    /* Parameter validation. */
+    CHECK(camera_pro_local_tonemap(NULL, W, H, stride, 0, evs, 3, out)
+              == CAMERA_ERROR_INVALID_PARAMETER, "null frame rejected");
+    CHECK(camera_pro_local_tonemap(px, W, H, stride, 0, evs, 0, out)
+              == CAMERA_ERROR_INVALID_PARAMETER, "n_ev=0 rejected");
+    CHECK(camera_pro_local_tonemap(px, W, H, stride, 0, NULL, 3, out)
+              == CAMERA_ERROR_INVALID_PARAMETER, "null evs rejected");
+    free(px); free(out);
+}
+
 static void test_dng_writer(void) {
     printf("DNG writer\n");
     const int32_t W = 32, H = 24, stride = W * 4;
@@ -413,6 +456,7 @@ int main(void) {
     test_waveform_falsecolor();
     test_adjustments();
     test_exposure_fusion();
+    test_local_tonemap();
     test_dng_writer();
     test_hal_stub();
     printf("\n=== %d checks, %d failures ===\n", g_checks, g_failures);

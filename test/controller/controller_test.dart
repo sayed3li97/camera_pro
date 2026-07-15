@@ -115,7 +115,7 @@ void main() {
       );
     });
 
-    test('captureHdr brackets, fuses, and restores exposure', () async {
+    test('captureHdr renders from a single frame (no exposure walk)', () async {
       final backend = RecordingBackend()
         ..frame = PreviewFrame(
             bytes: Uint8List(2 * 1 * 4), width: 2, height: 1, isBgra: false);
@@ -123,20 +123,25 @@ void main() {
         capabilities: fullCapabilities(),
         backend: backend,
       );
-      final photo = await controller.captureHdr(stops: const [-1.0, 0.0, 1.0]);
+      final photo = await controller.captureHdr(stops: const [-2.0, 0.0, 2.0]);
       expect(photo.path, '/tmp/hdr.png');
       expect(controller.state, CameraState.previewing);
-      // Bracket walks the three stops in order, then restores to the baseline
-      // (0), not the last stop — otherwise the camera is left over-exposed.
-      // Parse the EV numerically so the assertion holds on both the VM and web
-      // (dart2js prints -1.0 as "-1").
-      final evValues = backend.calls
-          .where((c) => c.startsWith('ev:'))
-          .map((c) => double.parse(c.substring(3)))
-          .toList();
-      expect(evValues, <double>[-1.0, 0.0, 1.0, 0.0]);
-      expect(evValues.last, 0.0); // exposure restored last
-      expect(backend.calls, contains('fuse:3:2x1'));
+      expect(backend.calls, contains('hdr:3:2x1'));
+      // Single capture: it must NOT walk exposures (that path ghosts).
+      expect(backend.calls.where((c) => c.startsWith('ev:')), isEmpty);
+    });
+
+    test('captureHdr surfaces noFrame and recovers state', () async {
+      final backend = RecordingBackend(); // latestFrame() == null
+      final controller = CameraProController.forTesting(
+        capabilities: fullCapabilities(),
+        backend: backend,
+      );
+      await expectLater(
+        controller.captureHdr(),
+        throwsA(isA<CameraCaptureError>()),
+      );
+      expect(controller.state, CameraState.previewing);
     });
 
     test('captureHdr throws when HDR is unsupported', () async {
@@ -148,31 +153,6 @@ void main() {
         () => controller.captureHdr(),
         throwsA(isA<CameraFeatureNotSupportedError>()),
       );
-    });
-
-    test('captureHdr rejects a mid-bracket resolution change and recovers',
-        () async {
-      // Frame 2 comes back a different size (e.g. an orientation flip on web).
-      final backend = RecordingBackend()
-        ..frameQueue.addAll(<PreviewFrame>[
-          PreviewFrame(
-              bytes: Uint8List(2 * 2 * 4), width: 2, height: 2, isBgra: false),
-          PreviewFrame(
-              bytes: Uint8List(4 * 2 * 4), width: 4, height: 2, isBgra: false),
-        ]);
-      final controller = CameraProController.forTesting(
-        capabilities: fullCapabilities(),
-        backend: backend,
-      );
-      await expectLater(
-        controller.captureHdr(stops: const [-1.0, 1.0]),
-        throwsA(isA<CameraCaptureError>()),
-      );
-      // The finally still restored exposure and unwedged the state machine.
-      expect(controller.state, CameraState.previewing);
-      final lastEv =
-          backend.calls.where((c) => c.startsWith('ev:')).last;
-      expect(double.parse(lastEv.substring(3)), 0.0);
     });
   });
 }

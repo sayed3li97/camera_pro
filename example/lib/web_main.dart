@@ -232,7 +232,7 @@ class _WebCameraPageState extends State<WebCameraPage> {
     final controller = _controller;
     if (controller == null) return;
     try {
-      final photo = await controller.captureHdr(stops: const <double>[-2, 0, 2]);
+      final photo = await controller.captureHdr();
       await _showCaptured(photo);
     } on Object catch (e) {
       setState(() => _error = '$e');

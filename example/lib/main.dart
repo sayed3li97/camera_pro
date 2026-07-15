@@ -232,10 +232,9 @@ class _CapabilityPageState extends State<CapabilityPage> {
     final controller = _controller;
     if (controller == null) return;
     try {
-      final photo =
-          await controller.captureHdr(stops: const <double>[-2, 0, 2]);
+      final photo = await controller.captureHdr();
       setState(() => _savedPath = photo.path);
-      _showSnack('HDR: fused -2/0/+2 EV → ${photo.width}x${photo.height}');
+      _showSnack('HDR: tone-mapped → ${photo.width}x${photo.height}');
     } on Object catch (e) {
       setState(() => _error = '$e');
     }

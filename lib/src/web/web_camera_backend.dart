@@ -383,22 +383,23 @@ class WebCameraBackend implements CameraBackend {
   }
 
   @override
-  Future<CapturedPhoto> fuseExposures(
-    List<Uint8List> frames, {
+  Future<CapturedPhoto> renderHdr(
+    Uint8List frame, {
     required int width,
     required int height,
+    required List<double> stops,
     bool isBgra = false,
   }) async {
-    final fused = NativeCore.exposureFusion(frames,
-        width: width, height: height, isBgra: isBgra);
-    // Web can't write files; return the fused RGBA in memory (the sample app
-    // decodes it via decodeImageFromPixels, same as capturePhoto).
+    final tonemapped = NativeCore.localTonemap(frame,
+        width: width, height: height, isBgra: isBgra, stops: stops);
+    // Web can't write files; return the tone-mapped RGBA in memory (the sample
+    // app decodes it via decodeImageFromPixels, same as capturePhoto).
     return CapturedPhoto(
       width: width,
       height: height,
       format: ImageFormat.png,
       timestamp: DateTime.now(),
-      bytes: fused,
+      bytes: tonemapped,
     );
   }
 

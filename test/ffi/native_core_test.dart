@@ -239,9 +239,43 @@ void main() {
       );
     });
 
-    test('exposure fusion: C core and pure-Dart port agree within 1 LSB', () {
-      // Cross-check the FFI kernel against the byte-for-byte web port on a
-      // pseudo-random bracket (fixed seed => deterministic).
+    test('local tone mapping lifts shadows and tames highlights', () {
+      // One high-DR frame: left half deep shadow, right half near-clipped, with
+      // a fine stripe so there is local contrast to adapt to.
+      const w = 32, h = 16;
+      final frame = Uint8List(w * h * 4);
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          final base = x < w ~/ 2 ? 28 : 224;
+          final v = (y & 2) != 0 ? base + 12 : base - 12;
+          final o = (y * w + x) * 4;
+          frame[o] = frame[o + 1] = frame[o + 2] = v;
+          frame[o + 3] = 255;
+        }
+      }
+      final out = NativeCore.localTonemap(frame, width: w, height: h, isBgra: false);
+      // Region means: shadow half rises, highlight half falls.
+      var inDark = 0, outDark = 0, inBright = 0, outBright = 0;
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          final o = (y * w + x) * 4;
+          if (x < w ~/ 2) {
+            inDark += frame[o];
+            outDark += out[o];
+          } else {
+            inBright += frame[o];
+            outBright += out[o];
+          }
+        }
+      }
+      expect(outDark, greaterThan(inDark), reason: 'shadows lifted');
+      expect(outBright, lessThan(inBright), reason: 'highlights tamed');
+      expect(out[3], 255);
+    });
+
+    test('exposure fusion + tonemap: C core and pure-Dart port stay close', () {
+      // Multi-scale float pyramids can't be bit-exact across the FFI/JS number
+      // models, but the ports must not diverge meaningfully.
       const w = 24, h = 16, n = 3;
       var seed = 0x51ED;
       int rnd() => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) >> 8 & 0xff;
@@ -255,17 +289,26 @@ void main() {
         }
         return b;
       });
-      final c = NativeCore.exposureFusion(bracket, width: w, height: h);
-      final dart =
-          webcore.NativeCore.exposureFusion(bracket, width: w, height: h);
-      expect(dart.length, c.length);
-      var maxDiff = 0;
-      for (var i = 0; i < c.length; i++) {
-        final d = (c[i] - dart[i]).abs();
-        if (d > maxDiff) maxDiff = d;
+
+      int maxDiff(Uint8List a, Uint8List b) {
+        var m = 0;
+        for (var i = 0; i < a.length; i++) {
+          final d = (a[i] - b[i]).abs();
+          if (d > m) m = d;
+        }
+        return m;
       }
-      expect(maxDiff, lessThanOrEqualTo(1),
-          reason: 'C vs Dart fusion diverged by $maxDiff LSB');
+
+      final fC = NativeCore.exposureFusion(bracket, width: w, height: h);
+      final fD = webcore.NativeCore.exposureFusion(bracket, width: w, height: h);
+      expect(maxDiff(fC, fD), lessThanOrEqualTo(4),
+          reason: 'fusion C vs Dart diverged');
+
+      final tC = NativeCore.localTonemap(bracket.first, width: w, height: h);
+      final tD =
+          webcore.NativeCore.localTonemap(bracket.first, width: w, height: h);
+      expect(maxDiff(tC, tD), lessThanOrEqualTo(4),
+          reason: 'tonemap C vs Dart diverged');
     });
 
     test('buffer pool acquires, drains, and releases', () {

@@ -203,19 +203,20 @@ class RecordingBackend implements CameraBackend {
   }
 
   @override
-  Future<CapturedPhoto> fuseExposures(
-    List<Uint8List> frames, {
+  Future<CapturedPhoto> renderHdr(
+    Uint8List frame, {
     required int width,
     required int height,
+    required List<double> stops,
     bool isBgra = true,
   }) async {
-    calls.add('fuse:${frames.length}:${width}x$height');
+    calls.add('hdr:${stops.length}:${width}x$height');
     return CapturedPhoto(
       width: width,
       height: height,
       format: ImageFormat.png,
       timestamp: DateTime(2026),
-      bytes: frames.isEmpty ? null : frames.first,
+      bytes: frame,
       path: '/tmp/hdr.png',
     );
   }

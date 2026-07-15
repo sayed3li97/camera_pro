@@ -57,7 +57,7 @@ unverifiable device code).
 | Live histogram / focus peaking / zebra / false color / waveform | ✅ all five live overlays |
 | RAW/DNG + EXIF (ISO, exposure, timestamps) | ✅ no libtiff/libexif needed |
 | Burst / EV bracketing | ✅ |
-| HDR fusion (merge brackets into one image) | ✅ `captureHdr()` — single-scale Mertens fusion in the C core + pure-Dart web port; verified live (77%-black frame → mean-luma 94, 0% crushed) |
+| HDR / local tone mapping | ✅ `captureHdr()` — single-frame exposure synthesis + multi-scale Mertens fusion (C core + pure-Dart web port); sharp, ghost-free, verified live |
 | libjpeg-turbo | skipped by design — PNG via dart:ui + DNG cover stills today |
 
 ## Phase 5 — GPU Visual Aids ✅ Metal · ⛔ others

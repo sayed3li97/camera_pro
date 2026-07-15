@@ -348,10 +348,12 @@ class NativeCore {
     }
   }
 
-  /// Pure-Dart port of `camera_pro_exposure_fusion` — single-scale Mertens
-  /// exposure fusion. Blends an aligned exposure bracket ([frames], same-sized
-  /// tightly-packed RGBA/BGRA buffers) into one tone-mapped image. Computed in
-  /// double to stay within 1 LSB of the C core (which the FFI test cross-checks).
+  /// Pure-Dart port of `camera_pro_exposure_fusion` — multi-scale Mertens
+  /// exposure fusion (contrast × saturation × well-exposedness, Laplacian
+  /// pyramid blend). Blends an aligned exposure bracket ([frames], same-sized
+  /// tightly-packed RGBA/BGRA buffers) into one tone-mapped image. Mirrors the C
+  /// core; float-pyramid rounding means it agrees with C to a few LSB, not bit-
+  /// exact.
   static Uint8List exposureFusion(
     List<Uint8List> frames, {
     required int width,
@@ -370,38 +372,268 @@ class NativeCore {
             '(${width}x$height RGBA); got ${f.length}');
       }
     }
-    final out = Uint8List(frameBytes);
-    const inv2s2 = 1.0 / (2.0 * 0.2 * 0.2); // = 12.5
-    final pixels = width * height;
-    for (var i = 0; i < pixels; i++) {
-      final o = i * 4;
-      var wsum = 0.0, a0 = 0.0, a1 = 0.0, a2 = 0.0;
-      for (var k = 0; k < n; k++) {
-        final f = frames[k];
-        final c0 = f[o].toDouble();
-        final c1 = f[o + 1].toDouble();
-        final c2 = f[o + 2].toDouble();
-        final z0 = c0 / 255.0 - 0.5;
-        final z1 = c1 / 255.0 - 0.5;
-        final z2 = c2 / 255.0 - 0.5;
-        final we = math.exp(-(z0 * z0 + z1 * z1 + z2 * z2) * inv2s2);
-        final mean = (c0 + c1 + c2) / 3.0;
-        final d0 = c0 - mean, d1 = c1 - mean, d2 = c2 - mean;
-        final sat = math.sqrt((d0 * d0 + d1 * d1 + d2 * d2) / 3.0) / 255.0;
-        final w = we * (sat + 0.1) + 1e-12;
-        wsum += w;
-        a0 += w * c0;
-        a1 += w * c1;
-        a2 += w * c2;
-      }
-      final inv = 1.0 / wsum;
-      out[o] = _clampRound(a0 * inv);
-      out[o + 1] = _clampRound(a1 * inv);
-      out[o + 2] = _clampRound(a2 * inv);
-      out[o + 3] = 255;
+    final npx = width * height;
+    final imgs = Float64List(n * npx * 3);
+    for (var k = 0; k < n; k++) {
+      _mfLoadRgb(frames[k], width, height, width * 4, isBgra, imgs, k * npx * 3);
     }
-    return out;
+    final fused = Float64List(npx * 3);
+    _mfFuse(imgs, n, width, height, fused);
+    return _mfStore(fused, width, height, isBgra);
   }
+
+  /// Pure-Dart port of `camera_pro_local_tonemap`. Synthesizes an exposure
+  /// stack from a single [frame] (gain = 2^ev in linear light for each ev in
+  /// [stops]) and runs multi-scale exposure fusion. Ghost-free single-capture
+  /// local tone mapping.
+  static Uint8List localTonemap(
+    Uint8List frame, {
+    required int width,
+    required int height,
+    bool isBgra = true,
+    List<double> stops = const <double>[-3.0, -1.5, 0.0, 1.5, 3.0],
+  }) {
+    final frameBytes = width * height * 4;
+    if (frame.length != frameBytes) {
+      throw ArgumentError('localTonemap: frame must be $frameBytes bytes '
+          '(${width}x$height RGBA); got ${frame.length}');
+    }
+    if (stops.isEmpty) throw ArgumentError('localTonemap needs >= 1 stop');
+    final npx = width * height;
+    final base = Float64List(npx * 3);
+    _mfLoadRgb(frame, width, height, width * 4, isBgra, base, 0);
+    final n = stops.length;
+    final imgs = Float64List(n * npx * 3);
+    for (var e = 0; e < n; e++) {
+      final gain = math.pow(2.0, stops[e]).toDouble();
+      final off = e * npx * 3;
+      for (var i = 0; i < npx * 3; i++) {
+        imgs[off + i] = _linToSrgb(_clamp01(_srgbToLin(base[i]) * gain));
+      }
+    }
+    final fused = Float64List(npx * 3);
+    _mfFuse(imgs, n, width, height, fused);
+    return _mfStore(fused, width, height, isBgra);
+  }
+}
+
+// ── Multi-scale exposure fusion (pure-Dart port of the C Mertens core) ──────
+
+const List<double> _mfK = <double>[1 / 16, 4 / 16, 6 / 16, 4 / 16, 1 / 16];
+
+double _clamp01(double v) => v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v);
+double _srgbToLin(double c) =>
+    c <= 0.04045 ? c / 12.92 : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
+double _linToSrgb(double c) {
+  if (c <= 0.0) return 0.0;
+  if (c >= 1.0) return 1.0;
+  return c <= 0.0031308
+      ? c * 12.92
+      : 1.055 * math.pow(c, 1.0 / 2.4).toDouble() - 0.055;
+}
+
+/// A Gaussian/Laplacian pyramid: `level[l]` is a `w[l]×h[l]` float plane.
+class _Pyr {
+  _Pyr(int width, int height) {
+    var m = width < height ? width : height, l = 1;
+    while (m > 1 && l < 16) {
+      m = (m + 1) >> 1;
+      l++;
+    }
+    levels = l;
+    var cw = width, ch = height;
+    level = <Float64List>[];
+    w = <int>[];
+    h = <int>[];
+    for (var i = 0; i < levels; i++) {
+      w.add(cw);
+      h.add(ch);
+      level.add(Float64List(cw * ch));
+      cw = (cw + 1) >> 1;
+      ch = (ch + 1) >> 1;
+    }
+  }
+  late final int levels;
+  late final List<Float64List> level;
+  late final List<int> w;
+  late final List<int> h;
+}
+
+void _mfReduce(Float64List src, int sw, int sh, Float64List dst, int dw, int dh) {
+  for (var y = 0; y < dh; y++) {
+    for (var x = 0; x < dw; x++) {
+      var acc = 0.0;
+      for (var q = -2; q <= 2; q++) {
+        var sy = 2 * y + q;
+        sy = sy < 0 ? 0 : (sy >= sh ? sh - 1 : sy);
+        for (var p = -2; p <= 2; p++) {
+          var sx = 2 * x + p;
+          sx = sx < 0 ? 0 : (sx >= sw ? sw - 1 : sx);
+          acc += _mfK[p + 2] * _mfK[q + 2] * src[sy * sw + sx];
+        }
+      }
+      dst[y * dw + x] = acc;
+    }
+  }
+}
+
+void _mfExpand(Float64List src, int sw, int sh, Float64List dst, int dw, int dh) {
+  for (var y = 0; y < dh; y++) {
+    for (var x = 0; x < dw; x++) {
+      var acc = 0.0;
+      for (var q = -2; q <= 2; q++) {
+        final yy = y - q;
+        if (yy & 1 != 0) continue;
+        var sy = yy >> 1;
+        sy = sy < 0 ? 0 : (sy >= sh ? sh - 1 : sy);
+        for (var p = -2; p <= 2; p++) {
+          final xx = x - p;
+          if (xx & 1 != 0) continue;
+          var sx = xx >> 1;
+          sx = sx < 0 ? 0 : (sx >= sw ? sw - 1 : sx);
+          acc += _mfK[p + 2] * _mfK[q + 2] * src[sy * sw + sx];
+        }
+      }
+      dst[y * dw + x] = 4.0 * acc;
+    }
+  }
+}
+
+void _mfGaussFill(_Pyr g) {
+  for (var l = 1; l < g.levels; l++) {
+    _mfReduce(g.level[l - 1], g.w[l - 1], g.h[l - 1], g.level[l], g.w[l], g.h[l]);
+  }
+}
+
+void _mfGaussToLap(_Pyr g, Float64List tmp) {
+  for (var l = 0; l < g.levels - 1; l++) {
+    _mfExpand(g.level[l + 1], g.w[l + 1], g.h[l + 1], tmp, g.w[l], g.h[l]);
+    final nn = g.w[l] * g.h[l];
+      for (var i = 0; i < nn; i++) {
+        g.level[l][i] -= tmp[i];
+      }
+  }
+}
+
+void _mfCollapse(_Pyr lap, Float64List tmp) {
+  for (var l = lap.levels - 2; l >= 0; l--) {
+    _mfExpand(lap.level[l + 1], lap.w[l + 1], lap.h[l + 1], tmp, lap.w[l], lap.h[l]);
+    final nn = lap.w[l] * lap.h[l];
+      for (var i = 0; i < nn; i++) {
+        lap.level[l][i] += tmp[i];
+      }
+  }
+}
+
+/// Fuse n interleaved-RGB float images ([0,1], w*h*3 each) into [out].
+void _mfFuse(Float64List imgs, int n, int w, int h, Float64List out) {
+  final npx = w * h;
+  const inv2s2 = 1.0 / (2.0 * 0.2 * 0.2);
+  final gray = Float64List(npx);
+  final wsum = Float64List(npx);
+  final tmp = Float64List(npx);
+  final wpyr = List<_Pyr>.generate(n, (_) => _Pyr(w, h));
+  final lpyr = _Pyr(w, h);
+  final acc = _Pyr(w, h);
+
+  for (var k = 0; k < n; k++) {
+    final base = k * npx * 3;
+    for (var i = 0; i < npx; i++) {
+      gray[i] = 0.299 * imgs[base + i * 3] +
+          0.587 * imgs[base + i * 3 + 1] +
+          0.114 * imgs[base + i * 3 + 2];
+    }
+    final wl = wpyr[k].level[0];
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        final i = y * w + x;
+        final xm = x > 0 ? x - 1 : 0, xp = x < w - 1 ? x + 1 : w - 1;
+        final ym = y > 0 ? y - 1 : 0, yp = y < h - 1 ? y + 1 : h - 1;
+        final lap = gray[y * w + xm] +
+            gray[y * w + xp] +
+            gray[ym * w + x] +
+            gray[yp * w + x] -
+            4.0 * gray[i];
+        final c = lap < 0 ? -lap : lap;
+        final r = imgs[base + i * 3],
+            g = imgs[base + i * 3 + 1],
+            b = imgs[base + i * 3 + 2];
+        final m = (r + g + b) / 3.0;
+        final s = math.sqrt(
+            ((r - m) * (r - m) + (g - m) * (g - m) + (b - m) * (b - m)) / 3.0);
+        final zr = r - 0.5, zg = g - 0.5, zb = b - 0.5;
+        final e = math.exp(-(zr * zr + zg * zg + zb * zb) * inv2s2);
+        final wt = (c + 1e-5) * (s + 1e-5) * e;
+        wl[i] = wt;
+        wsum[i] += wt;
+      }
+    }
+  }
+  for (var k = 0; k < n; k++) {
+    final wl = wpyr[k].level[0];
+      for (var i = 0; i < npx; i++) {
+        wl[i] /= (wsum[i] + 1e-12);
+      }
+    _mfGaussFill(wpyr[k]);
+  }
+
+  for (var c = 0; c < 3; c++) {
+    for (var l = 0; l < acc.levels; l++) {
+      final al = acc.level[l];
+        for (var i = 0; i < al.length; i++) {
+          al[i] = 0.0;
+        }
+    }
+    for (var k = 0; k < n; k++) {
+      final base = k * npx * 3;
+      final l0 = lpyr.level[0];
+        for (var i = 0; i < npx; i++) {
+          l0[i] = imgs[base + i * 3 + c];
+        }
+      _mfGaussFill(lpyr);
+      _mfGaussToLap(lpyr, tmp);
+      for (var l = 0; l < acc.levels; l++) {
+        final nn = acc.w[l] * acc.h[l];
+        final wpl = wpyr[k].level[l], ll = lpyr.level[l], al = acc.level[l];
+          for (var i = 0; i < nn; i++) {
+            al[i] += wpl[i] * ll[i];
+          }
+      }
+    }
+    _mfCollapse(acc, tmp);
+    final r0 = acc.level[0];
+      for (var i = 0; i < npx; i++) {
+        out[i * 3 + c] = _clamp01(r0[i]);
+      }
+  }
+}
+
+void _mfLoadRgb(Uint8List frame, int w, int h, int stride, bool isBgra,
+    Float64List dst, int dstOff) {
+  final ri = isBgra ? 2 : 0, bi = isBgra ? 0 : 2;
+  for (var y = 0; y < h; y++) {
+    final row = y * stride;
+    for (var x = 0; x < w; x++) {
+      final p = row + x * 4;
+      final d = dstOff + (y * w + x) * 3;
+      dst[d] = frame[p + ri] / 255.0;
+      dst[d + 1] = frame[p + 1] / 255.0;
+      dst[d + 2] = frame[p + bi] / 255.0;
+    }
+  }
+}
+
+Uint8List _mfStore(Float64List src, int w, int h, bool isBgra) {
+  final ri = isBgra ? 2 : 0, bi = isBgra ? 0 : 2;
+  final out = Uint8List(w * h * 4);
+  for (var i = 0; i < w * h; i++) {
+    final o = i * 4;
+    out[o + ri] = _clampRound(src[i * 3] * 255.0);
+    out[o + 1] = _clampRound(src[i * 3 + 1] * 255.0);
+    out[o + bi] = _clampRound(src[i * 3 + 2] * 255.0);
+    out[o + 3] = 255;
+  }
+  return out;
 }
 
 /// Minimal pure-Dart buffer pool (web has no native ring buffer).

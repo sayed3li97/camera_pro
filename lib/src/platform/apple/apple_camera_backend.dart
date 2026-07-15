@@ -495,18 +495,19 @@ class AppleCameraBackend implements CameraBackend {
   }
 
   @override
-  Future<CapturedPhoto> fuseExposures(
-    List<Uint8List> frames, {
+  Future<CapturedPhoto> renderHdr(
+    Uint8List frame, {
     required int width,
     required int height,
+    required List<double> stops,
     bool isBgra = true,
   }) async {
-    final fused = NativeCore.exposureFusion(frames,
-        width: width, height: height, isBgra: isBgra);
+    final tonemapped = NativeCore.localTonemap(frame,
+        width: width, height: height, isBgra: isBgra, stops: stops);
     final ts = DateTime.now();
     return _encodePng(
       PreviewFrame(
-          bytes: fused, width: width, height: height, isBgra: isBgra),
+          bytes: tonemapped, width: width, height: height, isBgra: isBgra),
       '${Directory.systemTemp.path}/camera_pro_hdr_${ts.millisecondsSinceEpoch}.png',
       ts,
     );

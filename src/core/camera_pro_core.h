@@ -157,12 +157,12 @@ camera_pro_box_blur(
     int32_t  stride,
     int32_t  radius);
 
-/* ── HDR exposure fusion ───────────────────────────────────────────────────
+/* ── HDR exposure fusion (multi-scale Mertens) ─────────────────────────────
  * Merges an aligned exposure bracket (`n` frames back-to-back, each
- * height*stride bytes) into one tone-mapped 8-bit image via single-scale
- * Mertens fusion (well-exposedness x saturation weights). `out` must hold
- * width*height*4 bytes. The colour channels are weighted symmetrically, so
- * is_bgra does not change the result. Returns CAMERA_OK or an error code.
+ * height*stride bytes) into one tone-mapped 8-bit image. Each source is
+ * weighted per pixel by contrast × saturation × well-exposedness and blended
+ * through a Laplacian pyramid, so local contrast is preserved with no seams or
+ * halos. `out` must hold width*height*4 bytes. Returns CAMERA_OK or an error.
  * ───────────────────────────────────────────────────────────────────────── */
 CAMERA_PRO_EXPORT int32_t
 camera_pro_exposure_fusion(
@@ -172,6 +172,24 @@ camera_pro_exposure_fusion(
     int32_t        height,
     int32_t        stride,
     int32_t        is_bgra,
+    uint8_t*       out);
+
+/* ── Single-capture local tone mapping ─────────────────────────────────────
+ * One frame in, one tone-mapped frame out. Synthesises an exposure stack from
+ * the single frame (gain = 2^ev in linear light for each ev in `evs`) and runs
+ * multi-scale exposure fusion. Ghost-free (all exposures share one instant) —
+ * the HDR path for cameras without sensor-level bracketing. `out` must hold
+ * width*height*4 bytes. Returns CAMERA_OK or an error code.
+ * ───────────────────────────────────────────────────────────────────────── */
+CAMERA_PRO_EXPORT int32_t
+camera_pro_local_tonemap(
+    const uint8_t* frame,
+    int32_t        width,
+    int32_t        height,
+    int32_t        stride,
+    int32_t        is_bgra,
+    const float*   evs,
+    int32_t        n_ev,
     uint8_t*       out);
 
 /* ── Luminance waveform monitor ────────────────────────────────────────────

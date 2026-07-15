@@ -9,17 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **HDR exposure fusion** — `CameraProController.captureHdr({stops})` captures an
-  EV bracket and merges it into one tone-mapped image using single-scale Mertens
-  exposure fusion (per-pixel well-exposedness × saturation weighting). Implemented
-  in the C core (`camera_pro_exposure_fusion`, math in double) with a byte-for-byte
-  pure-Dart port for web; the two agree to within 1 LSB (cross-checked). Exposed
-  through the backend contract as `fuseExposures`, advertised via
-  `capabilities.supportsHdr`, and wired into both example apps (an HDR button).
-  Verified live on the FaceTime HD camera: a mid exposure that was 77% crushed
-  black fused to a balanced image (mean luma 9 → 94, 0% crushed shadows). The C
-  harness gains a synthetic-bracket test (shadow lift + highlight recovery),
-  bringing it to 70 checks (arm64 + x86_64/Rosetta).
+- **HDR / single-capture local tone mapping** — `CameraProController.captureHdr({stops})`
+  renders one tone-mapped HDR still. It captures a **single** frame (so there is
+  no motion ghosting), synthesizes an exposure stack from it by scaling in linear
+  light at each EV in `stops` (default `[-3, -1.5, 0, 1.5, 3]`), and fuses the
+  stack with **multi-scale Mertens exposure fusion** — contrast × saturation ×
+  well-exposedness weights blended through a Laplacian pyramid, so local contrast
+  is preserved with no halos. Implemented in the C core
+  (`camera_pro_local_tonemap` + a rewritten multi-scale `camera_pro_exposure_fusion`)
+  with a pure-Dart port for web (cross-checked to a few LSB). Exposed through the
+  backend contract as `renderHdr`, advertised via `capabilities.supportsHdr`, and
+  wired into both example apps (an HDR button). Verified live on the FaceTime HD
+  camera: the result is pixel-sharp and balanced (shadows opened, highlights held,
+  local contrast intact). The C harness gains fusion + tone-mapping tests, at 78
+  checks (arm64 + x86_64/Rosetta).
 
 ## [0.0.2] - 2026-07-07
 

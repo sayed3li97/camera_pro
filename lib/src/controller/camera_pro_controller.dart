@@ -400,17 +400,18 @@ class CameraProController {
     return photos;
   }
 
-  /// Captures an exposure bracket at [stops] (EV offsets) and fuses the frames
-  /// into a single tone-mapped HDR image via single-scale Mertens exposure
-  /// fusion (in the C core natively, pure Dart on web). Restores the previous
-  /// exposure compensation afterwards.
+  /// Captures a single frame and renders one HDR still from it with local tone
+  /// mapping: an exposure stack is synthesized from the frame (gain = 2^ev for
+  /// each ev in [stops], in linear light) and fused with multi-scale exposure
+  /// fusion, lifting shadows and taming highlights while preserving local
+  /// contrast. Because it uses one instant, the result is sharp and ghost-free.
   ///
-  /// On devices with real sensor-exposure control the bracket captures genuine
-  /// shadow and highlight detail; where exposure is applied digitally the
-  /// fusion still balances the frame (local tone-mapping). Throws
-  /// [CameraFeatureNotSupportedError] when the backend can't fuse.
+  /// This is the right model for cameras without sensor-level exposure
+  /// bracketing (all current backends): a temporal bracket on a hand-held or
+  /// moving subject would ghost. Throws [CameraFeatureNotSupportedError] when
+  /// the backend can't render HDR.
   Future<CapturedPhoto> captureHdr({
-    List<double> stops = const <double>[-2.0, 0.0, 2.0],
+    List<double> stops = const <double>[-3.0, -1.5, 0.0, 1.5, 3.0],
   }) async {
     if (!_capabilities.supportsHdr) {
       throw CameraFeatureNotSupportedError(
@@ -418,53 +419,26 @@ class CameraProController {
         platformReason: 'Backend does not support HDR capture',
       );
     }
-    if (stops.length < 2) {
-      throw CameraInvalidParameterError(message: 'HDR needs >= 2 EV stops');
+    if (stops.isEmpty) {
+      throw CameraInvalidParameterError(message: 'HDR needs >= 1 EV stop');
     }
     if (!state.canCapture) {
       throw CameraStateException('Cannot capture in state ${state.name}');
     }
     _stateMachine.transition(CameraState.capturing);
-    final previous = _settings.exposureCompensation ?? const Ev(0);
     try {
-      final frames = <PreviewFrame>[];
-      for (final stop in stops) {
-        await setExposureCompensation(Ev(stop));
-        // Let at least one adjusted frame land before grabbing it.
-        await Future<void>.delayed(const Duration(milliseconds: 120));
-        final frame = _backend.latestFrame();
-        if (frame == null) {
-          throw CameraCaptureError(reason: CaptureFailureReason.noFrame);
-        }
-        frames.add(frame);
+      final frame = _backend.latestFrame();
+      if (frame == null) {
+        throw CameraCaptureError(reason: CaptureFailureReason.noFrame);
       }
-      // Fusion assumes every frame shares geometry. A live resolution change
-      // mid-bracket (e.g. an orientation flip on web) would otherwise index a
-      // shorter buffer and corrupt or crash — surface it as a typed error.
-      final first = frames.first;
-      final consistent = frames.every((f) =>
-          f.width == first.width &&
-          f.height == first.height &&
-          f.isBgra == first.isBgra &&
-          f.bytes.length == first.bytes.length);
-      if (!consistent) {
-        throw CameraCaptureError(reason: CaptureFailureReason.interrupted);
-      }
-      return await _backend.fuseExposures(
-        frames.map((f) => f.bytes).toList(growable: false),
-        width: first.width,
-        height: first.height,
-        isBgra: first.isBgra,
+      return await _backend.renderHdr(
+        frame.bytes,
+        width: frame.width,
+        height: frame.height,
+        isBgra: frame.isBgra,
+        stops: stops,
       );
     } finally {
-      // Best-effort exposure restore: never let it mask the capture result or
-      // its error, and never let it skip the state-machine restore below (which
-      // would wedge the session in `capturing`).
-      try {
-        await setExposureCompensation(previous);
-      } on Object {
-        // ignore: the original outcome (a photo or the real failure) wins.
-      }
       if (_stateMachine.canTransitionTo(CameraState.previewing)) {
         _stateMachine.transition(CameraState.previewing);
       }
