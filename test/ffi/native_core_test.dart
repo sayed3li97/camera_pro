@@ -12,6 +12,8 @@ import 'dart:typed_data';
 import 'package:camera_pro/camera_pro.dart';
 // ignore: implementation_imports
 import 'package:camera_pro/src/ffi/camera_pro_bindings.dart' as bindings;
+// ignore: implementation_imports
+import 'package:camera_pro/src/web/native_core_web.dart' as webcore;
 import 'package:ffi/ffi.dart' as pkg_ffi;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -170,6 +172,143 @@ void main() {
         pkg_ffi.malloc.free(cStr);
         pkg_ffi.malloc.free(cTime);
       }
+    });
+
+    test('exposure fusion lifts shadows and recovers highlights', () {
+      // A 2-pixel scene captured as a 3-frame bracket. The shadow pixel is only
+      // well-exposed in the bright frame; the highlight only in the dark frame.
+      const w = 2, h = 1;
+      Uint8List frame(int shadow, int highlight) {
+        final b = Uint8List(w * h * 4);
+        b[0] = b[1] = b[2] = shadow;
+        b[3] = 255;
+        b[4] = b[5] = b[6] = highlight;
+        b[7] = 255;
+        return b;
+      }
+
+      final bracket = <Uint8List>[
+        frame(0, 150), // dark
+        frame(30, 230), // mid
+        frame(110, 255), // bright
+      ];
+      final fused = NativeCore.exposureFusion(bracket,
+          width: w, height: h, isBgra: false);
+      // Shadow (mid=30) is pulled up toward the bright frame's 110.
+      expect(fused[0], greaterThan(90));
+      // Highlight (mid=230) is pulled down toward the dark frame's 150.
+      expect(fused[4], lessThan(180));
+      expect(fused[3], 255);
+      expect(fused[7], 255);
+    });
+
+    test('exposure fusion preserves channel order (not grayscale)', () {
+      // A saturated orange bracket (R > G > B). If the kernel swapped output
+      // channels or dropped saturation weighting, a grayscale test could not
+      // tell — this pins the color through.
+      const w = 2, h = 1;
+      Uint8List frame(int r, int g, int b) {
+        final px = Uint8List(w * h * 4);
+        for (var i = 0; i < w * h; i++) {
+          px[i * 4] = r;
+          px[i * 4 + 1] = g;
+          px[i * 4 + 2] = b;
+          px[i * 4 + 3] = 255;
+        }
+        return px;
+      }
+
+      final fused = NativeCore.exposureFusion(
+        <Uint8List>[frame(40, 24, 12), frame(200, 120, 60), frame(255, 200, 150)],
+        width: w,
+        height: h,
+        isBgra: false,
+      );
+      expect(fused[0], greaterThan(fused[1])); // R > G
+      expect(fused[1], greaterThan(fused[2])); // G > B
+      expect(fused[0], greaterThan(150)); // red stays dominant
+    });
+
+    test('exposure fusion rejects mismatched frame sizes', () {
+      final ok = Uint8List(2 * 2 * 4);
+      final wrong = Uint8List(2 * 2 * 4 - 4);
+      expect(
+        () => NativeCore.exposureFusion(<Uint8List>[ok, wrong],
+            width: 2, height: 2),
+        throwsArgumentError,
+      );
+    });
+
+    test('local tone mapping lifts shadows and tames highlights', () {
+      // One high-DR frame: left half deep shadow, right half near-clipped, with
+      // a fine stripe so there is local contrast to adapt to.
+      const w = 32, h = 16;
+      final frame = Uint8List(w * h * 4);
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          final base = x < w ~/ 2 ? 28 : 224;
+          final v = (y & 2) != 0 ? base + 12 : base - 12;
+          final o = (y * w + x) * 4;
+          frame[o] = frame[o + 1] = frame[o + 2] = v;
+          frame[o + 3] = 255;
+        }
+      }
+      final out = NativeCore.localTonemap(frame, width: w, height: h, isBgra: false);
+      // Region means: shadow half rises, highlight half falls.
+      var inDark = 0, outDark = 0, inBright = 0, outBright = 0;
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          final o = (y * w + x) * 4;
+          if (x < w ~/ 2) {
+            inDark += frame[o];
+            outDark += out[o];
+          } else {
+            inBright += frame[o];
+            outBright += out[o];
+          }
+        }
+      }
+      expect(outDark, greaterThan(inDark), reason: 'shadows lifted');
+      expect(outBright, lessThan(inBright), reason: 'highlights tamed');
+      expect(out[3], 255);
+    });
+
+    test('exposure fusion + tonemap: C core and pure-Dart port stay close', () {
+      // Multi-scale float pyramids can't be bit-exact across the FFI/JS number
+      // models, but the ports must not diverge meaningfully.
+      const w = 24, h = 16, n = 3;
+      var seed = 0x51ED;
+      int rnd() => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) >> 8 & 0xff;
+      final bracket = List<Uint8List>.generate(n, (_) {
+        final b = Uint8List(w * h * 4);
+        for (var i = 0; i < w * h; i++) {
+          b[i * 4] = rnd();
+          b[i * 4 + 1] = rnd();
+          b[i * 4 + 2] = rnd();
+          b[i * 4 + 3] = 255;
+        }
+        return b;
+      });
+
+      int maxDiff(Uint8List a, Uint8List b) {
+        var m = 0;
+        for (var i = 0; i < a.length; i++) {
+          final d = (a[i] - b[i]).abs();
+          if (d > m) m = d;
+        }
+        return m;
+      }
+
+      final fC = NativeCore.exposureFusion(bracket, width: w, height: h);
+      final fD = webcore.NativeCore.exposureFusion(bracket, width: w, height: h);
+      expect(maxDiff(fC, fD), lessThanOrEqualTo(4),
+          reason: 'fusion C vs Dart diverged');
+
+      final tC = NativeCore.localTonemap(bracket.first, width: w, height: h);
+      final tD =
+          webcore.NativeCore.localTonemap(bracket.first, width: w, height: h);
+      expect(maxDiff(tC, tD), lessThanOrEqualTo(4),
+          reason: 'tonemap C vs Dart diverged');
     });
 
     test('buffer pool acquires, drains, and releases', () {

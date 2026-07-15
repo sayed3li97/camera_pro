@@ -264,6 +264,50 @@ external int camera_pro_box_blur(
   int radius,
 );
 
+// HDR exposure fusion — O(n*w*h) work, so NOT a leaf call.
+@ffi.Native<
+    ffi.Int32 Function(
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Pointer<ffi.Uint8>,
+    )>()
+external int camera_pro_exposure_fusion(
+  ffi.Pointer<ffi.Uint8> frames,
+  int n,
+  int width,
+  int height,
+  int stride,
+  int isBgra,
+  ffi.Pointer<ffi.Uint8> out,
+);
+
+// Single-capture local tone mapping (synthesize stack from one frame, fuse).
+@ffi.Native<
+    ffi.Int32 Function(
+      ffi.Pointer<ffi.Uint8>,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Int32,
+      ffi.Pointer<ffi.Float>,
+      ffi.Int32,
+      ffi.Pointer<ffi.Uint8>,
+    )>()
+external int camera_pro_local_tonemap(
+  ffi.Pointer<ffi.Uint8> frame,
+  int width,
+  int height,
+  int stride,
+  int isBgra,
+  ffi.Pointer<ffi.Float> evs,
+  int nEv,
+  ffi.Pointer<ffi.Uint8> out,
+);
+
 // ── Linear-DNG (RAW) writer ─────────────────────────────────────────────────
 
 @ffi.Native<

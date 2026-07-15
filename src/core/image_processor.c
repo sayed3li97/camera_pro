@@ -259,6 +259,12 @@ static inline uint8_t clampf_u8(float v) {
     return (uint8_t)(v + 0.5f);
 }
 
+static inline uint8_t clampd_u8(double v) {
+    if (v < 0.0) return 0;
+    if (v > 255.0) return 255;
+    return (uint8_t)(v + 0.5);
+}
+
 int32_t camera_pro_adjust_pixels(
     uint8_t* px, int32_t width, int32_t height, int32_t stride,
     int32_t is_bgra, float gain, float bias, float temp, float contrast) {
@@ -381,6 +387,292 @@ int32_t camera_pro_box_blur(
 
     free(tmp);
     return CAMERA_OK;
+}
+
+/* ── HDR exposure fusion (multi-scale Mertens) ─────────────────────────────
+ * Real exposure fusion (Mertens, Kautz & Van Reeth 2009): each source image is
+ * weighted per pixel by contrast (|Laplacian| of luma) × saturation (stddev of
+ * RGB) × well-exposedness (Gaussian around mid-grey), and the weighted blend is
+ * done through a Laplacian pyramid so local contrast is preserved and there are
+ * no seams or halos. A naive single-scale weighted average (the previous
+ * implementation) looks washed-out and haloed; the multi-resolution blend is
+ * what makes the result usable. Everything is computed in float [0,1].
+ * ───────────────────────────────────────────────────────────────────────── */
+
+#define MF_MAX_LEVELS 16
+
+typedef struct {
+    float*  level[MF_MAX_LEVELS];
+    int32_t w[MF_MAX_LEVELS];
+    int32_t h[MF_MAX_LEVELS];
+    int32_t levels;
+} MfPyr;
+
+static const float MF_K[5] = {1.f/16, 4.f/16, 6.f/16, 4.f/16, 1.f/16};
+
+static inline float mf_clamp01(float v) { return v < 0.f ? 0.f : (v > 1.f ? 1.f : v); }
+
+/* sRGB <-> linear, so exposure gains are applied in physically-linear light. */
+static inline float mf_srgb_to_lin(float c) {
+    return c <= 0.04045f ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
+}
+static inline float mf_lin_to_srgb(float c) {
+    if (c <= 0.f) return 0.f;
+    if (c >= 1.f) return 1.f;
+    return c <= 0.0031308f ? c * 12.92f : 1.055f * powf(c, 1.f / 2.4f) - 0.055f;
+}
+
+static int32_t mf_levels_for(int32_t w, int32_t h) {
+    int32_t m = w < h ? w : h, l = 1;
+    while (m > 1 && l < MF_MAX_LEVELS) { m = (m + 1) / 2; l++; }
+    return l;
+}
+
+/* Binomial [1 4 6 4 1]/16 blur, subsample by 2 (border-replicated). */
+static void mf_reduce(const float* src, int32_t sw, int32_t sh,
+                      float* dst, int32_t dw, int32_t dh) {
+    for (int32_t y = 0; y < dh; y++)
+        for (int32_t x = 0; x < dw; x++) {
+            float acc = 0.f;
+            for (int32_t q = -2; q <= 2; q++) {
+                int32_t sy = 2 * y + q;
+                sy = sy < 0 ? 0 : (sy >= sh ? sh - 1 : sy);
+                for (int32_t p = -2; p <= 2; p++) {
+                    int32_t sx = 2 * x + p;
+                    sx = sx < 0 ? 0 : (sx >= sw ? sw - 1 : sx);
+                    acc += MF_K[p + 2] * MF_K[q + 2] * src[(size_t)sy * sw + sx];
+                }
+            }
+            dst[(size_t)y * dw + x] = acc;
+        }
+}
+
+/* Upsample src (sw×sh) to dst (dw×dh) via the same binomial kernel (×4 gain). */
+static void mf_expand(const float* src, int32_t sw, int32_t sh,
+                      float* dst, int32_t dw, int32_t dh) {
+    for (int32_t y = 0; y < dh; y++)
+        for (int32_t x = 0; x < dw; x++) {
+            float acc = 0.f;
+            for (int32_t q = -2; q <= 2; q++) {
+                int32_t yy = y - q;
+                if (yy & 1) continue;
+                int32_t sy = yy / 2;
+                sy = sy < 0 ? 0 : (sy >= sh ? sh - 1 : sy);
+                for (int32_t p = -2; p <= 2; p++) {
+                    int32_t xx = x - p;
+                    if (xx & 1) continue;
+                    int32_t sx = xx / 2;
+                    sx = sx < 0 ? 0 : (sx >= sw ? sw - 1 : sx);
+                    acc += MF_K[p + 2] * MF_K[q + 2] * src[(size_t)sy * sw + sx];
+                }
+            }
+            dst[(size_t)y * dw + x] = 4.f * acc;
+        }
+}
+
+static int mf_pyr_alloc(MfPyr* p, int32_t w, int32_t h) {
+    p->levels = mf_levels_for(w, h);
+    int32_t cw = w, ch = h;
+    for (int32_t l = 0; l < p->levels; l++) {
+        p->w[l] = cw; p->h[l] = ch;
+        p->level[l] = (float*)malloc((size_t)cw * ch * sizeof(float));
+        if (!p->level[l]) {
+            for (int32_t j = 0; j < l; j++) free(p->level[j]);
+            p->levels = 0; /* make mf_pyr_free a safe no-op on a failed pyramid */
+            return 0;
+        }
+        cw = (cw + 1) / 2; ch = (ch + 1) / 2;
+    }
+    return 1;
+}
+static void mf_pyr_free(MfPyr* p) {
+    for (int32_t l = 0; l < p->levels; l++) free(p->level[l]);
+}
+static void mf_gauss_fill(MfPyr* g) {  /* level[0] must be set */
+    for (int32_t l = 1; l < g->levels; l++)
+        mf_reduce(g->level[l - 1], g->w[l - 1], g->h[l - 1],
+                  g->level[l], g->w[l], g->h[l]);
+}
+/* Turn a filled Gaussian pyramid into a Laplacian pyramid in place. */
+static void mf_gauss_to_lap(MfPyr* g, float* tmp) {
+    for (int32_t l = 0; l < g->levels - 1; l++) {
+        mf_expand(g->level[l + 1], g->w[l + 1], g->h[l + 1], tmp, g->w[l], g->h[l]);
+        size_t nn = (size_t)g->w[l] * g->h[l];
+        for (size_t i = 0; i < nn; i++) g->level[l][i] -= tmp[i];
+    }
+}
+/* Collapse a Laplacian pyramid; result ends up in level[0]. */
+static void mf_collapse(MfPyr* lap, float* tmp) {
+    for (int32_t l = lap->levels - 2; l >= 0; l--) {
+        mf_expand(lap->level[l + 1], lap->w[l + 1], lap->h[l + 1], tmp, lap->w[l], lap->h[l]);
+        size_t nn = (size_t)lap->w[l] * lap->h[l];
+        for (size_t i = 0; i < nn; i++) lap->level[l][i] += tmp[i];
+    }
+}
+
+/* Fuse n interleaved-RGB float images ([0,1], w*h*3 each) into `out` (w*h*3). */
+static int32_t mf_fuse(const float* imgs, int32_t n, int32_t w, int32_t h, float* out) {
+    const size_t npx = (size_t)w * h;
+    const float inv2s2 = 1.f / (2.f * 0.2f * 0.2f);
+    int32_t rc = CAMERA_ERROR_OUT_OF_MEMORY;
+
+    float* gray = (float*)malloc(npx * sizeof(float));
+    float* wsum = (float*)calloc(npx, sizeof(float));
+    float* tmp  = (float*)malloc(npx * sizeof(float));
+    MfPyr* wpyr = (MfPyr*)calloc((size_t)n, sizeof(MfPyr));
+    MfPyr lpyr, acc;
+    memset(&lpyr, 0, sizeof lpyr); /* levels=0 => mf_pyr_free is a safe no-op */
+    memset(&acc, 0, sizeof acc);
+    if (!gray || !wsum || !tmp || !wpyr) goto done;
+    if (!mf_pyr_alloc(&lpyr, w, h)) goto done;
+    if (!mf_pyr_alloc(&acc, w, h)) goto done;
+    for (int32_t k = 0; k < n; k++) {
+        if (!mf_pyr_alloc(&wpyr[k], w, h)) goto done;
+    }
+
+    /* Per-image weights: contrast × saturation × well-exposedness (+ floors). */
+    for (int32_t k = 0; k < n; k++) {
+        const float* im = imgs + (size_t)k * npx * 3;
+        for (size_t i = 0; i < npx; i++)
+            gray[i] = 0.299f * im[i*3] + 0.587f * im[i*3+1] + 0.114f * im[i*3+2];
+        for (int32_t y = 0; y < h; y++)
+            for (int32_t x = 0; x < w; x++) {
+                size_t i = (size_t)y * w + x;
+                int32_t xm = x > 0 ? x-1 : 0, xp = x < w-1 ? x+1 : w-1;
+                int32_t ym = y > 0 ? y-1 : 0, yp = y < h-1 ? y+1 : h-1;
+                float lap = gray[(size_t)y*w+xm] + gray[(size_t)y*w+xp]
+                          + gray[(size_t)ym*w+x] + gray[(size_t)yp*w+x] - 4.f*gray[i];
+                float C = lap < 0 ? -lap : lap;
+                float R = im[i*3], G = im[i*3+1], B = im[i*3+2];
+                float m = (R + G + B) / 3.f;
+                float S = sqrtf(((R-m)*(R-m) + (G-m)*(G-m) + (B-m)*(B-m)) / 3.f);
+                float zr = R-0.5f, zg = G-0.5f, zb = B-0.5f;
+                float E = expf(-(zr*zr + zg*zg + zb*zb) * inv2s2);
+                float Wt = (C + 1e-5f) * (S + 1e-5f) * E;
+                wpyr[k].level[0][i] = Wt;
+                wsum[i] += Wt;
+            }
+    }
+    /* Normalise weights per pixel, then build their Gaussian pyramids. */
+    for (int32_t k = 0; k < n; k++) {
+        for (size_t i = 0; i < npx; i++)
+            wpyr[k].level[0][i] /= (wsum[i] + 1e-12f);
+        mf_gauss_fill(&wpyr[k]);
+    }
+
+    /* Blend each channel through the pyramid. */
+    for (int32_t c = 0; c < 3; c++) {
+        for (int32_t l = 0; l < acc.levels; l++)
+            memset(acc.level[l], 0, (size_t)acc.w[l] * acc.h[l] * sizeof(float));
+        for (int32_t k = 0; k < n; k++) {
+            const float* im = imgs + (size_t)k * npx * 3;
+            for (size_t i = 0; i < npx; i++) lpyr.level[0][i] = im[i*3 + c];
+            mf_gauss_fill(&lpyr);
+            mf_gauss_to_lap(&lpyr, tmp);
+            for (int32_t l = 0; l < acc.levels; l++) {
+                size_t nn = (size_t)acc.w[l] * acc.h[l];
+                const float* wl = wpyr[k].level[l];
+                const float* ll = lpyr.level[l];
+                float* al = acc.level[l];
+                for (size_t i = 0; i < nn; i++) al[i] += wl[i] * ll[i];
+            }
+        }
+        mf_collapse(&acc, tmp);
+        for (size_t i = 0; i < npx; i++) out[i*3 + c] = mf_clamp01(acc.level[0][i]);
+    }
+    rc = CAMERA_OK;
+
+done:
+    free(gray); free(wsum); free(tmp);
+    mf_pyr_free(&lpyr);
+    mf_pyr_free(&acc);
+    if (wpyr) { for (int32_t k = 0; k < n; k++) mf_pyr_free(&wpyr[k]); free(wpyr); }
+    return rc;
+}
+
+/* Load an RGBA/BGRA frame into canonical interleaved-RGB float [0,1]. */
+static void mf_load_rgb(const uint8_t* frame, int32_t w, int32_t h, int32_t stride,
+                        int32_t is_bgra, float* dst) {
+    int ri = is_bgra ? 2 : 0, bi = is_bgra ? 0 : 2;
+    for (int32_t y = 0; y < h; y++) {
+        const uint8_t* row = frame + (size_t)y * stride;
+        for (int32_t x = 0; x < w; x++) {
+            const uint8_t* p = row + x * 4;
+            float* d = dst + ((size_t)y * w + x) * 3;
+            d[0] = p[ri] / 255.f; d[1] = p[1] / 255.f; d[2] = p[bi] / 255.f;
+        }
+    }
+}
+/* Store canonical RGB float back to an RGBA/BGRA buffer (alpha opaque). */
+static void mf_store_rgba(const float* src, int32_t w, int32_t h, int32_t is_bgra, uint8_t* out) {
+    int ri = is_bgra ? 2 : 0, bi = is_bgra ? 0 : 2;
+    for (size_t i = 0; i < (size_t)w * h; i++) {
+        uint8_t* o = out + i * 4;
+        o[ri] = clampd_u8(src[i*3]   * 255.f);
+        o[1]  = clampd_u8(src[i*3+1] * 255.f);
+        o[bi] = clampd_u8(src[i*3+2] * 255.f);
+        o[3]  = 255;
+    }
+}
+
+int32_t camera_pro_exposure_fusion(
+    const uint8_t* frames, int32_t n, int32_t width, int32_t height,
+    int32_t stride, int32_t is_bgra, uint8_t* out) {
+
+    if (!frames || !out || n <= 0 || width <= 0 || height <= 0)
+        return CAMERA_ERROR_INVALID_PARAMETER;
+    if (stride <= 0) stride = width * 4;
+
+    const size_t npx = (size_t)width * height;
+    const size_t frame_bytes = (size_t)height * stride;
+    float* imgs = (float*)malloc((size_t)n * npx * 3 * sizeof(float));
+    float* fused = (float*)malloc(npx * 3 * sizeof(float));
+    if (!imgs || !fused) { free(imgs); free(fused); return CAMERA_ERROR_OUT_OF_MEMORY; }
+
+    for (int32_t k = 0; k < n; k++)
+        mf_load_rgb(frames + (size_t)k * frame_bytes, width, height, stride, is_bgra,
+                    imgs + (size_t)k * npx * 3);
+    int32_t rc = mf_fuse(imgs, n, width, height, fused);
+    if (rc == CAMERA_OK) mf_store_rgba(fused, width, height, is_bgra, out);
+    free(imgs); free(fused);
+    return rc;
+}
+
+/* ── Single-capture local tone mapping ─────────────────────────────────────
+ * One frame in, one tone-mapped frame out. Synthesises an exposure stack from
+ * the single frame by scaling it in linear light at each EV in `evs`
+ * (gain = 2^ev), then runs multi-scale exposure fusion. Because every synthetic
+ * exposure comes from the same instant, the result is sharp and ghost-free —
+ * the right behaviour for cameras without sensor-level exposure bracketing.
+ * `out` is width*height*4. Returns CAMERA_OK or an error code.
+ * ───────────────────────────────────────────────────────────────────────── */
+int32_t camera_pro_local_tonemap(
+    const uint8_t* frame, int32_t width, int32_t height, int32_t stride,
+    int32_t is_bgra, const float* evs, int32_t n_ev, uint8_t* out) {
+
+    if (!frame || !out || !evs || n_ev <= 0 || width <= 0 || height <= 0)
+        return CAMERA_ERROR_INVALID_PARAMETER;
+    if (stride <= 0) stride = width * 4;
+
+    const size_t npx = (size_t)width * height;
+    float* base = (float*)malloc(npx * 3 * sizeof(float));
+    float* imgs = (float*)malloc((size_t)n_ev * npx * 3 * sizeof(float));
+    float* fused = (float*)malloc(npx * 3 * sizeof(float));
+    if (!base || !imgs || !fused) {
+        free(base); free(imgs); free(fused); return CAMERA_ERROR_OUT_OF_MEMORY;
+    }
+    mf_load_rgb(frame, width, height, stride, is_bgra, base);
+
+    for (int32_t e = 0; e < n_ev; e++) {
+        float gain = exp2f(evs[e]);
+        float* im = imgs + (size_t)e * npx * 3;
+        for (size_t i = 0; i < npx * 3; i++)
+            im[i] = mf_lin_to_srgb(mf_clamp01(mf_srgb_to_lin(base[i]) * gain));
+    }
+    int32_t rc = mf_fuse(imgs, n_ev, width, height, fused);
+    if (rc == CAMERA_OK) mf_store_rgba(fused, width, height, is_bgra, out);
+    free(base); free(imgs); free(fused);
+    return rc;
 }
 
 /* ── Luminance waveform monitor ────────────────────────────────────────── */

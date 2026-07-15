@@ -64,6 +64,16 @@ takes three at −2 / 0 / +2 EV, with measured mean luminance.
 
 ![Burst and EV bracket](burst-bracket.svg)
 
+## HDR / single-capture local tone mapping
+
+`captureHdr()` captures one frame, synthesizes an exposure stack from it (scaling
+in linear light at several EV offsets), and fuses the stack with multi-scale
+Mertens exposure fusion — contrast × saturation × well-exposedness weights
+blended through a Laplacian pyramid. One instant in, so the tone-mapped result is
+sharp and ghost-free.
+
+![HDR / local tone mapping](hdr-fusion.svg)
+
 ## CI matrix
 
 `native.yml` runs on every push across macOS, Ubuntu, Windows, and web — every

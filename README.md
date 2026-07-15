@@ -12,7 +12,7 @@ A Flutter camera package built on a shared C/C++ core with a crash-proof Dart AP
 
 > **Project status: working camera engine (v0.0.2, pre-release)**
 >
-> On macOS the example app opens the real camera and does live preview, all six manual controls, five live visual-aid overlays (histogram, focus peaking, zebra, false color, waveform — GPU-accelerated via Metal where available), PNG + RAW/DNG capture with EXIF, burst, EV bracketing, and H.264 video recording — every one of those verified live against real hardware. The same AVFoundation backend compiles for iOS with sensor-level manual controls. **Web** runs in the browser too: a getUserMedia backend with live preview, capture, and the visual aids reimplemented in pure Dart — verified in Chrome with screenshots ([see below](#web)). Linux (V4L2) and Windows (Media Foundation) backends implement the full HAL contract and pass CI on real ubuntu/windows runners (camera-hardware runtime pending machines with cameras). Android is not started — see [ROADMAP.md](ROADMAP.md) for the honest gate on every remaining item.
+> On macOS the example app opens the real camera and does live preview, all six manual controls, five live visual-aid overlays (histogram, focus peaking, zebra, false color, waveform — GPU-accelerated via Metal where available), PNG + RAW/DNG capture with EXIF, burst, EV bracketing, single-capture HDR/local tone mapping, and H.264 video recording — every one of those verified live against real hardware. The same AVFoundation backend compiles for iOS with sensor-level manual controls. **Web** runs in the browser too: a getUserMedia backend with live preview, capture, and the visual aids reimplemented in pure Dart — verified in Chrome with screenshots ([see below](#web)). Linux (V4L2) and Windows (Media Foundation) backends implement the full HAL contract and pass CI on real ubuntu/windows runners (camera-hardware runtime pending machines with cameras). Android is not started — see [ROADMAP.md](ROADMAP.md) for the honest gate on every remaining item.
 
 ---
 
@@ -129,6 +129,25 @@ Burst and exposure bracketing run through the same capture path:
 
 ![burst and EV bracket](doc/diagrams/burst-bracket.svg)
 
+`captureHdr()` renders one tone-mapped HDR still. A temporal bracket on a
+hand-held camera ghosts (the frames are ~⅓ s apart), so instead it captures a
+**single** frame and synthesizes an exposure stack from it — scaling it in
+linear light at a range of EV offsets — then fuses that stack with **multi-scale
+[Mertens exposure fusion](https://en.wikipedia.org/wiki/Exposure_fusion)**: each
+synthetic exposure is weighted per pixel by contrast (|Laplacian|), saturation,
+and well-exposedness, and blended through a Laplacian pyramid so local contrast
+is preserved with no seams or halos. Because every exposure comes from one
+instant, the result is **sharp and ghost-free** — genuine single-capture local
+tone mapping. The C core and the pure-Dart web port share the algorithm
+(cross-checked to a few LSB).
+
+![HDR exposure fusion](doc/diagrams/hdr-fusion.svg)
+
+Verified live on the FaceTime HD camera: the tone-mapped still is pixel-sharp
+(no ghosting) and balances the frame — shadows opened, highlights held, local
+contrast preserved. On a dark scene it lifts a mid exposure from ~9 to ~90 mean
+luma; on a bright scene it gently compresses the range.
+
 | Feature | Status | Notes |
 |---|---|---|
 | `capturePhoto()` API surface | ✅ | Method exists, capability-guarded, typed error on failure |
@@ -137,7 +156,8 @@ Burst and exposure bracketing run through the same capture path:
 | RAW/DNG capture | ✅ | Dependency-free linear-DNG writer with EXIF; ffmpeg-verified from the real camera |
 | EXIF embedding | ✅ | ISO, exposure time, timestamps in the DNG's EXIF IFD |
 | libjpeg-turbo integration | — | Skipped by design (PNG via dart:ui + DNG cover stills) |
-| Burst / EV bracket | ✅ | Verified: 5-shot burst ~1.2s; bracket YAVG 25.8/96.9/183.4. HDR fusion ❌ |
+| Burst / EV bracket | ✅ | Verified: 5-shot burst ~1.2s; bracket YAVG 25.8/96.9/183.4 |
+| HDR / local tone mapping | ✅ | `captureHdr()` — single-frame synthesis + multi-scale Mertens fusion. Verified live: sharp, ghost-free, balanced |
 
 ### Video
 
