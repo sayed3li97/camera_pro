@@ -33,3 +33,4 @@ coverage/
 # Example build output
 example/build/
 example/.dart_tool/
+cp_test.dng

@@ -228,6 +228,18 @@ class _CapabilityPageState extends State<CapabilityPage> {
     }
   }
 
+  Future<void> _hdr() async {
+    final controller = _controller;
+    if (controller == null) return;
+    try {
+      final photo = await controller.captureHdr();
+      setState(() => _savedPath = photo.path);
+      _showSnack('HDR: tone-mapped → ${photo.width}x${photo.height}');
+    } on Object catch (e) {
+      setState(() => _error = '$e');
+    }
+  }
+
   Future<void> _toggleRecording() async {
     final controller = _controller;
     if (controller == null) return;
@@ -298,6 +310,13 @@ class _CapabilityPageState extends State<CapabilityPage> {
                   tooltip: 'EV bracket (-2/0/+2)',
                   onPressed: _bracket,
                   child: const Icon(Icons.exposure),
+                ),
+                const SizedBox(width: 12),
+                FloatingActionButton.small(
+                  heroTag: 'hdr',
+                  tooltip: 'HDR fusion (-2/0/+2)',
+                  onPressed: _hdr,
+                  child: const Icon(Icons.hdr_on),
                 ),
                 const SizedBox(width: 12),
                 FloatingActionButton.extended(

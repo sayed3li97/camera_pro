@@ -390,9 +390,59 @@ class CameraProController {
         photos.add(await capturePhoto(format: format));
       }
     } finally {
-      await setExposureCompensation(previous);
+      // Best-effort restore; a failure here must not mask a capture error.
+      try {
+        await setExposureCompensation(previous);
+      } on Object {
+        // ignore
+      }
     }
     return photos;
+  }
+
+  /// Captures a single frame and renders one HDR still from it with local tone
+  /// mapping: an exposure stack is synthesized from the frame (gain = 2^ev for
+  /// each ev in [stops], in linear light) and fused with multi-scale exposure
+  /// fusion, lifting shadows and taming highlights while preserving local
+  /// contrast. Because it uses one instant, the result is sharp and ghost-free.
+  ///
+  /// This is the right model for cameras without sensor-level exposure
+  /// bracketing (all current backends): a temporal bracket on a hand-held or
+  /// moving subject would ghost. Throws [CameraFeatureNotSupportedError] when
+  /// the backend can't render HDR.
+  Future<CapturedPhoto> captureHdr({
+    List<double> stops = const <double>[-3.0, -1.5, 0.0, 1.5, 3.0],
+  }) async {
+    if (!_capabilities.supportsHdr) {
+      throw CameraFeatureNotSupportedError(
+        feature: 'HDR fusion',
+        platformReason: 'Backend does not support HDR capture',
+      );
+    }
+    if (stops.isEmpty) {
+      throw CameraInvalidParameterError(message: 'HDR needs >= 1 EV stop');
+    }
+    if (!state.canCapture) {
+      throw CameraStateException('Cannot capture in state ${state.name}');
+    }
+    _stateMachine.transition(CameraState.capturing);
+    try {
+      final frame = _backend.latestFrame();
+      if (frame == null) {
+        throw CameraCaptureError(reason: CaptureFailureReason.noFrame);
+      }
+      return await _backend.renderHdr(
+        frame.bytes,
+        width: frame.width,
+        height: frame.height,
+        isBgra: frame.isBgra,
+        stops: stops,
+      );
+    } finally {
+      if (_stateMachine.canTransitionTo(CameraState.previewing)) {
+        _stateMachine.transition(CameraState.previewing);
+      }
+    }
   }
 
   /// Starts a live stream. The API is modelled; the native RTMP/SRT client is

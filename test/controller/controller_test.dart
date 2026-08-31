@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:camera_pro/camera_pro.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -109,6 +111,46 @@ void main() {
       );
       expect(
         () => controller.capturePhoto(format: ImageFormat.raw),
+        throwsA(isA<CameraFeatureNotSupportedError>()),
+      );
+    });
+
+    test('captureHdr renders from a single frame (no exposure walk)', () async {
+      final backend = RecordingBackend()
+        ..frame = PreviewFrame(
+            bytes: Uint8List(2 * 1 * 4), width: 2, height: 1, isBgra: false);
+      final controller = CameraProController.forTesting(
+        capabilities: fullCapabilities(),
+        backend: backend,
+      );
+      final photo = await controller.captureHdr(stops: const [-2.0, 0.0, 2.0]);
+      expect(photo.path, '/tmp/hdr.png');
+      expect(controller.state, CameraState.previewing);
+      expect(backend.calls, contains('hdr:3:2x1'));
+      // Single capture: it must NOT walk exposures (that path ghosts).
+      expect(backend.calls.where((c) => c.startsWith('ev:')), isEmpty);
+    });
+
+    test('captureHdr surfaces noFrame and recovers state', () async {
+      final backend = RecordingBackend(); // latestFrame() == null
+      final controller = CameraProController.forTesting(
+        capabilities: fullCapabilities(),
+        backend: backend,
+      );
+      await expectLater(
+        controller.captureHdr(),
+        throwsA(isA<CameraCaptureError>()),
+      );
+      expect(controller.state, CameraState.previewing);
+    });
+
+    test('captureHdr throws when HDR is unsupported', () async {
+      final controller = CameraProController.forTesting(
+        capabilities: standardCapabilities(),
+        backend: RecordingBackend(),
+      );
+      expect(
+        () => controller.captureHdr(),
         throwsA(isA<CameraFeatureNotSupportedError>()),
       );
     });

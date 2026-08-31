@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 1180 500" xmlns="http://www.w3.org/2000/svg" role="img" font-family="'Berkeley Mono','JetBrains Mono','SF Mono',ui-monospace,monospace">
+  <title>camera_pro single-capture HDR / local tone mapping</title>
+  <desc>captureHdr captures one frame, synthesizes an exposure stack from it by scaling in linear light at several EV offsets, then fuses the stack with multi-scale Mertens exposure fusion (contrast, saturation and well-exposedness weights blended through a Laplacian pyramid). Because every exposure comes from one instant, the tone-mapped result is sharp and ghost-free.</desc>
+  <defs>
+    <filter id="gh" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3"/></filter>
+    <linearGradient id="bal" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#141a24"/><stop offset="1" stop-color="#c9d3e0"/>
+    </linearGradient>
+    <style>
+      .node{animation:in .5s ease both}@keyframes in{from{opacity:0}to{opacity:1}}
+      .flow{stroke-dasharray:3 9;animation:fl 1.3s linear infinite}@keyframes fl{to{stroke-dashoffset:-24}}
+      .t{fill:#cbd2dc;font-size:15px}.s{fill:#6a7482;font-size:11.5px}
+      .lane{fill:#4b5462;font-size:12px;letter-spacing:2px}.cap{fill:#8b93a1;font-size:14px}.acc{fill:#4a9eff}
+      .rowl{fill:#9aa3b1;font-size:12px}
+    </style>
+  </defs>
+  <rect width="1180" height="500" rx="18" fill="#0a0d13"/>
+  <rect x="10" y="10" width="1160" height="480" rx="16" fill="none" stroke="#1a2230"/>
+
+  <text class="lane" x="56" y="70">captureHdr()  ·  ONE frame, no temporal bracket → ghost-free</text>
+
+  <!-- single captured frame -->
+  <g class="node" style="animation-delay:.1s">
+    <text class="s" x="140" y="150" text-anchor="middle">1 frame · one instant</text>
+    <rect x="66" y="160" width="150" height="150" rx="12" fill="url(#bal)" stroke="#3a4656"/>
+    <circle cx="88" cy="182" r="4" fill="#e0526a"/><text x="102" y="186" fill="#0a0d13" font-size="11">LIVE</text>
+  </g>
+
+  <!-- synthesize exposure stack -->
+  <path d="M216,235 H300" stroke="#37414f" stroke-width="1.4" fill="none"/>
+  <g class="node" style="animation-delay:.28s">
+    <text class="s" x="410" y="118" text-anchor="middle">synthesize · gain = 2^EV · linear light</text>
+    <rect x="300" y="132" width="220" height="42" rx="7" fill="#10141d" stroke="#2a3442"/>
+    <text class="rowl" x="316" y="158">−EV  shadows open</text>
+    <rect x="300" y="196" width="220" height="42" rx="7" fill="#2a3442" stroke="#3a4656"/>
+    <text class="rowl" x="316" y="222" fill="#cbd2dc">0     midtones</text>
+    <rect x="300" y="260" width="220" height="42" rx="7" fill="#c9d3e0" stroke="#e6ecf5"/>
+    <text x="316" y="286" fill="#0a0d13" font-size="12">+EV  highlights hold</text>
+  </g>
+
+  <!-- multi-scale fusion -->
+  <g stroke="#37414f" stroke-width="1.4" fill="none">
+    <path d="M520,153 C 560,153 560,210 600,210"/>
+    <path d="M520,217 H600"/>
+    <path d="M520,281 C 560,281 560,224 600,224"/>
+  </g>
+  <g class="node" style="animation-delay:.5s">
+    <rect x="600" y="170" width="270" height="120" rx="12" fill="#0e131c" stroke="#4a9eff"/>
+    <text class="t" x="735" y="200" text-anchor="middle">multi-scale Mertens fusion</text>
+    <text class="s" x="735" y="224" text-anchor="middle">contrast × saturation × well-exposed</text>
+    <line x1="624" y1="240" x2="846" y2="240" stroke="#1e2634"/>
+    <text class="s" x="735" y="262" text-anchor="middle">Laplacian pyramid blend · no halos</text>
+    <text class="s" x="735" y="280" text-anchor="middle">C core ≈ pure-Dart web</text>
+  </g>
+
+  <!-- tone-mapped output -->
+  <path d="M870,230 H930" stroke="#4a9eff" stroke-width="1.4" fill="none" opacity=".6" class="flow"/>
+  <g class="node" style="animation-delay:.7s">
+    <text class="s" x="1042" y="150" text-anchor="middle">tone-mapped · sharp</text>
+    <rect x="930" y="160" width="150" height="150" rx="12" fill="url(#bal)" stroke="#3a4656"/>
+    <circle cx="952" cy="182" r="4" fill="#4a9eff"/><text x="966" y="186" fill="#0a0d13" font-size="11">HDR</text>
+  </g>
+
+  <!-- flow dot -->
+  <circle r="4.5" fill="#4a9eff" filter="url(#gh)">
+    <animateMotion dur="4.6s" repeatCount="indefinite" calcMode="linear"
+      path="M141,235 L300,217 L600,217 L930,235 L1005,235"/>
+  </circle>
+
+  <text class="cap" x="56" y="440">One capture, one instant — <tspan class="acc">sharp and ghost-free</tspan>. Shadows opened, highlights held, local contrast preserved.</text>
+  <text class="cap" x="56" y="466">Single-image exposure fusion = local tone mapping. Works wherever the digital pipeline runs  ·  macOS + web.</text>
+</svg>

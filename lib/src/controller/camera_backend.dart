@@ -81,6 +81,19 @@ abstract interface class CameraBackend {
 
   // ── Capture ──
   Future<CapturedPhoto> capturePhoto({ImageFormat? format});
+
+  /// Tone-maps a single captured [frame] into an HDR still: synthesizes an
+  /// exposure stack from it at [stops] and runs multi-scale exposure fusion,
+  /// then encodes with this backend's still encoder. Single-frame, so the
+  /// result is sharp and ghost-free. Used by the controller's HDR capture path.
+  Future<CapturedPhoto> renderHdr(
+    Uint8List frame, {
+    required int width,
+    required int height,
+    required List<double> stops,
+    bool isBgra = true,
+  });
+
   Future<void> startVideoRecording(String path);
   Future<VideoResult> stopVideoRecording();
 
@@ -160,6 +173,16 @@ class StubCameraBackend implements CameraBackend {
   @override
   Future<CapturedPhoto> capturePhoto({ImageFormat? format}) async =>
       _unsupported('capturePhoto');
+
+  @override
+  Future<CapturedPhoto> renderHdr(
+    Uint8List frame, {
+    required int width,
+    required int height,
+    required List<double> stops,
+    bool isBgra = true,
+  }) async =>
+      _unsupported('renderHdr');
 
   @override
   Future<void> startVideoRecording(String path) async => _unsupported('recording');

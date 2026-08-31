@@ -187,7 +187,7 @@ class WebCameraBackend implements CameraBackend {
       supportsRawCapture: true, // pure-Dart linear-DNG writer
       supportsProRaw: false,
       supportsBurstMode: true, // controller-level, works everywhere
-      supportsHdr: false,
+      supportsHdr: true, // controller-level captureHdr (fusion), works everywhere
       supportsBracketing: true, // controller-level, works everywhere
       supportsDepthCapture: false,
       supportsLidar: false,
@@ -379,6 +379,27 @@ class WebCameraBackend implements CameraBackend {
       format: ImageFormat.png,
       timestamp: ts,
       bytes: frame.bytes,
+    );
+  }
+
+  @override
+  Future<CapturedPhoto> renderHdr(
+    Uint8List frame, {
+    required int width,
+    required int height,
+    required List<double> stops,
+    bool isBgra = false,
+  }) async {
+    final tonemapped = NativeCore.localTonemap(frame,
+        width: width, height: height, isBgra: isBgra, stops: stops);
+    // Web can't write files; return the tone-mapped RGBA in memory (the sample
+    // app decodes it via decodeImageFromPixels, same as capturePhoto).
+    return CapturedPhoto(
+      width: width,
+      height: height,
+      format: ImageFormat.png,
+      timestamp: DateTime.now(),
+      bytes: tonemapped,
     );
   }
 
